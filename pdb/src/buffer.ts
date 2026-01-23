@@ -147,6 +147,12 @@ export class ParseBuffer {
     return this.view.getUint16(this.offset, true);
   }
 
+  /** Peek at the next little-endian unsigned 32-bit integer without advancing. */
+  peekU32(): number {
+    if (this.remaining < 4) throw PdbError.unexpectedEof();
+    return this.view.getUint32(this.offset, true);
+  }
+
   /** Take `n` bytes from the buffer and advance the position. */
   take(n: number): Uint8Array {
     if (this.remaining < n) throw PdbError.unexpectedEof();
