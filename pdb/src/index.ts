@@ -1,0 +1,375 @@
+/**
+ * PDB (Program Database) file format parser for TypeScript/Bun.
+ *
+ * This is a zero-copy parser that operates entirely on a Uint8Array buffer.
+ * No I/O is performed - the caller is responsible for reading the file into memory.
+ *
+ * @example
+ * ```ts
+ * import { PDB } from "./index.js";
+ *
+ * const data = await Bun.file("example.pdb").bytes();
+ * const pdb = PDB.open(data);
+ *
+ * console.log("GUID:", pdb.guid);
+ * console.log("Age:", pdb.age);
+ * console.log("Machine:", pdb.machineType);
+ *
+ * // Iterate modules
+ * for (const mod of pdb.modules) {
+ *   console.log("Module:", mod.moduleName);
+ * }
+ *
+ * // Get type information
+ * const types = pdb.typeInformation;
+ * for (const item of types.items) {
+ *   const parsed = pdb.parseType(item);
+ *   if (parsed.kind === "Structure") {
+ *     console.log("Struct:", parsed.name);
+ *   }
+ * }
+ *
+ * // Get global symbols
+ * for (const sym of pdb.globalSymbols) {
+ *   const parsed = pdb.parseSymbol(sym);
+ *   if (parsed.kind === "Public") {
+ *     console.log("Public:", parsed.name);
+ *   }
+ * }
+ * ```
+ */
+
+// Re-export core types
+export * from "./common.js";
+export * from "./error.js";
+export { ParseBuffer, type Variant } from "./buffer.js";
+export { Msf, type MsfStream } from "./msf.js";
+export type { PdbInformation, StreamName } from "./pdb-info.js";
+export type {
+  DbiHeader,
+  DbiModule,
+  DbiSectionContribution,
+  DbiExtraStreams,
+  DebugInformation,
+} from "./dbi.js";
+export type {
+  TypeData,
+  IdData,
+  ClassType,
+  UnionType,
+  EnumerationType,
+  ProcedureType,
+  MemberFunctionType,
+  PointerType,
+  ModifierType,
+  ArrayType,
+  BitfieldType,
+  FieldListType,
+  ArgumentListType,
+  MethodListType,
+  MemberType,
+  StaticMemberType,
+  NestedType,
+  BaseClassType,
+  VirtualBaseClassType,
+  VirtualFunctionTablePointerType,
+  OverloadedMethodType,
+  MethodType,
+  EnumerateType,
+  TypeProperties,
+  FieldAttributes,
+  PointerAttributes,
+  ModifierFlags,
+  FuncId,
+  MemberFuncId,
+  BuildInfo,
+  StringId,
+  UdtSourceLine,
+  UdtModuleSourceLine,
+} from "./tpi/types.js";
+export {
+  MemberAccess,
+  MethodKind,
+  CallingConvention,
+} from "./tpi/types.js";
+export type { RawItem, TypeInformation } from "./tpi/parser.js";
+export { ItemFinder } from "./tpi/parser.js";
+export type {
+  RawSymbol,
+  SymbolData,
+  ObjNameSymbol,
+  RegisterVariableSymbol,
+  ConstantSymbol,
+  UserDefinedTypeSymbol,
+  DataSymbol,
+  PublicSymbol,
+  ProcedureSymbol,
+  ThreadStorageSymbol,
+  UsingNamespaceSymbol,
+  ProcedureReferenceSymbol,
+  DataReferenceSymbol,
+  AnnotationReferenceSymbol,
+  TrampolineSymbol,
+  ExportSymbol,
+  LocalSymbol,
+  BuildInfoSymbol,
+  InlineSiteSymbol,
+  BlockSymbol,
+  LabelSymbol,
+  ScopeEndSymbol,
+  BasePointerRelativeSymbol,
+  RegisterRelativeSymbol,
+  FrameProcedureSymbol,
+  CompileFlagsSymbol,
+} from "./symbols.js";
+export type {
+  LineInfo,
+  FileChecksum,
+  ModuleInfo,
+} from "./modi.js";
+export { AddressMap } from "./address-map.js";
+export { StringTable } from "./string-table.js";
+
+import { Msf, type MsfStream } from "./msf.js";
+import { parsePdbInformation, parseStreamNames, type PdbInformation, type StreamName } from "./pdb-info.js";
+import { parseDebugInformation, type DebugInformation, type DbiModule, type DbiExtraStreams } from "./dbi.js";
+import { parseItemInformation, parseTypeData, parseIdData, ItemFinder, type TypeInformation, type RawItem } from "./tpi/parser.js";
+import type { TypeData, IdData } from "./tpi/types.js";
+import { parseSymbolTable, parseSymbolData, type RawSymbol, type SymbolData } from "./symbols.js";
+import { parseModuleInfo, type ModuleInfo } from "./modi.js";
+import { buildAddressMap, parseSectionHeaders, AddressMap } from "./address-map.js";
+import { parseStringTable, StringTable } from "./string-table.js";
+import type { PdbGuid, ImageSectionHeader, StreamIndex } from "./common.js";
+import { formatGuid, streamIndexIsValid, MachineType, STREAM_INDEX_NONE } from "./common.js";
+import { PdbError } from "./error.js";
+
+/** Fixed stream numbers in the MSF. */
+const PDB_STREAM = 1;
+const TPI_STREAM = 2;
+const DBI_STREAM = 3;
+const IPI_STREAM = 4;
+
+/**
+ * Main PDB parser class.
+ *
+ * Provides high-level access to all PDB data structures. Operates on a
+ * Uint8Array buffer with no I/O operations.
+ */
+export class PDB {
+  private msf: Msf;
+  private _pdbInfo: PdbInformation | null = null;
+  private _streamNames: StreamName[] | null = null;
+  private _debugInfo: DebugInformation | null = null;
+  private _typeInfo: TypeInformation | null = null;
+  private _idInfo: TypeInformation | null = null;
+  private _globalSymbols: RawSymbol[] | null = null;
+  private _addressMap: AddressMap | null = null;
+  private _stringTable: StringTable | null = null;
+  private _sectionHeaders: ImageSectionHeader[] | null = null;
+
+  private constructor(msf: Msf) {
+    this.msf = msf;
+  }
+
+  /** Open a PDB file from a Uint8Array buffer. */
+  static open(data: Uint8Array): PDB {
+    const msf = Msf.open(data);
+    return new PDB(msf);
+  }
+
+  // ─── PDB Information ───
+
+  /** Get PDB metadata (GUID, age, signature). */
+  get pdbInformation(): PdbInformation {
+    if (!this._pdbInfo) {
+      const stream = this.msf.getStream(PDB_STREAM);
+      this._pdbInfo = parsePdbInformation(stream);
+    }
+    return this._pdbInfo;
+  }
+
+  /** The PDB's unique GUID. */
+  get guid(): PdbGuid {
+    return this.pdbInformation.guid;
+  }
+
+  /** The PDB's GUID formatted as a string. */
+  get guidString(): string {
+    return formatGuid(this.guid);
+  }
+
+  /** The PDB age (number of times written). */
+  get age(): number {
+    return this.pdbInformation.age;
+  }
+
+  /** Get named streams in the PDB. */
+  get streamNames(): StreamName[] {
+    if (!this._streamNames) {
+      const stream = this.msf.getStream(PDB_STREAM);
+      this._streamNames = parseStreamNames(stream);
+    }
+    return this._streamNames;
+  }
+
+  // ─── Debug Information (DBI) ───
+
+  /** Get parsed debug information. */
+  get debugInformation(): DebugInformation {
+    if (!this._debugInfo) {
+      const stream = this.msf.getStream(DBI_STREAM);
+      this._debugInfo = parseDebugInformation(stream);
+    }
+    return this._debugInfo;
+  }
+
+  /** The target machine architecture. */
+  get machineType(): MachineType {
+    return this.debugInformation.machineType;
+  }
+
+  /** List of modules (object files) contributing to this PDB. */
+  get modules(): DbiModule[] {
+    return this.debugInformation.modules;
+  }
+
+  /** Extra stream references from the DBI header. */
+  get extraStreams(): DbiExtraStreams {
+    return this.debugInformation.extraStreams;
+  }
+
+  // ─── Type Information (TPI) ───
+
+  /** Get the type information stream (TPI). */
+  get typeInformation(): TypeInformation {
+    if (!this._typeInfo) {
+      const stream = this.msf.getStream(TPI_STREAM);
+      this._typeInfo = parseItemInformation(stream);
+    }
+    return this._typeInfo;
+  }
+
+  /** Create an ItemFinder for efficient type lookup. */
+  get typeFinder(): ItemFinder {
+    return new ItemFinder(this.typeInformation);
+  }
+
+  /** Parse a raw type item into structured TypeData. */
+  parseType(item: RawItem): TypeData {
+    return parseTypeData(item);
+  }
+
+  // ─── Id Information (IPI) ───
+
+  /** Get the id information stream (IPI), if present. */
+  get idInformation(): TypeInformation | null {
+    if (!this._idInfo) {
+      if (!this.msf.hasStream(IPI_STREAM)) return null;
+      const stream = this.msf.getStream(IPI_STREAM);
+      this._idInfo = parseItemInformation(stream);
+    }
+    return this._idInfo;
+  }
+
+  /** Parse a raw id item into structured IdData. */
+  parseId(item: RawItem): IdData {
+    return parseIdData(item);
+  }
+
+  // ─── Symbols ───
+
+  /** Get the global symbol table. */
+  get globalSymbols(): RawSymbol[] {
+    if (!this._globalSymbols) {
+      const dbi = this.debugInformation;
+      const streamIndex = dbi.header.symbolRecordsStream;
+      if (!streamIndexIsValid(streamIndex)) {
+        throw PdbError.globalSymbolsNotFound();
+      }
+      const stream = this.msf.getStream(streamIndex);
+      this._globalSymbols = parseSymbolTable(stream);
+    }
+    return this._globalSymbols;
+  }
+
+  /** Parse a raw symbol into structured SymbolData. */
+  parseSymbol(symbol: RawSymbol): SymbolData {
+    return parseSymbolData(symbol);
+  }
+
+  // ─── Module Info ───
+
+  /** Get module-specific debug info (symbols, lines) for a module. */
+  getModuleInfo(module: DbiModule): ModuleInfo | null {
+    if (!streamIndexIsValid(module.stream)) return null;
+    const stream = this.msf.getStream(module.stream);
+    return parseModuleInfo(stream, module);
+  }
+
+  // ─── Address Map ───
+
+  /** Get the address map for RVA translation. */
+  get addressMap(): AddressMap {
+    if (!this._addressMap) {
+      const extra = this.extraStreams;
+      const sectionHeadersStream = this.getOptionalStream(extra.sectionHeaders);
+      const originalSectionHeadersStream = this.getOptionalStream(extra.originalSectionHeaders);
+      const omapFromSrcStream = this.getOptionalStream(extra.omapFromSrc);
+      const omapToSrcStream = this.getOptionalStream(extra.omapToSrc);
+
+      this._addressMap = buildAddressMap(
+        sectionHeadersStream,
+        originalSectionHeadersStream,
+        omapFromSrcStream,
+        omapToSrcStream,
+      );
+    }
+    return this._addressMap;
+  }
+
+  // ─── Section Headers ───
+
+  /** Get the PE section headers. */
+  get sectionHeaders(): ImageSectionHeader[] {
+    if (!this._sectionHeaders) {
+      const extra = this.extraStreams;
+      const stream = this.getOptionalStream(extra.sectionHeaders);
+      this._sectionHeaders = stream ? parseSectionHeaders(stream) : [];
+    }
+    return this._sectionHeaders;
+  }
+
+  // ─── String Table ───
+
+  /** Get the global string table (/names stream). */
+  get stringTable(): StringTable | null {
+    if (!this._stringTable) {
+      const namesStream = this.streamNames.find((s) => s.name === "/names");
+      if (!namesStream) return null;
+      const stream = this.msf.getStream(namesStream.streamId);
+      this._stringTable = parseStringTable(stream);
+    }
+    return this._stringTable;
+  }
+
+  // ─── Raw Stream Access ───
+
+  /** Access a raw stream by its index. */
+  getStream(index: StreamIndex): MsfStream {
+    return this.msf.getStream(index);
+  }
+
+  /** Get a named stream by looking it up in the stream names. */
+  getNamedStream(name: string): MsfStream | null {
+    const entry = this.streamNames.find((s) => s.name === name);
+    if (!entry) return null;
+    return this.msf.getStream(entry.streamId);
+  }
+
+  /** Get an optional stream (returns null if stream index is invalid). */
+  private getOptionalStream(index: StreamIndex): MsfStream | null {
+    if (!streamIndexIsValid(index)) return null;
+    if (!this.msf.hasStream(index)) return null;
+    return this.msf.getStream(index);
+  }
+}
