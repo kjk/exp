@@ -138,6 +138,25 @@ function dumpSizeStats(filename: string): void {
     return a.offset.offset - b.offset.offset;
   });
 
+  // Deduplicate: when the same symbol appears in both global and module-private
+  // tables, keep the module-private entry (has the actual object file path)
+  {
+    const best = new Map<string, RawEntry>();
+    for (const e of rawEntries) {
+      const key = `${e.offset.section}:${e.offset.offset}:${e.symbolName}`;
+      const prev = best.get(key);
+      if (!prev || prev.moduleName === "(global)") {
+        best.set(key, e);
+      }
+    }
+    rawEntries.length = 0;
+    rawEntries.push(...best.values());
+    rawEntries.sort((a, b) => {
+      if (a.offset.section !== b.offset.section) return a.offset.section - b.offset.section;
+      return a.offset.offset - b.offset.offset;
+    });
+  }
+
   // Compute sizes: for entries without explicit size, use gap to next symbol in same section
   for (let i = 0; i < rawEntries.length; i++) {
     const entry = rawEntries[i];
