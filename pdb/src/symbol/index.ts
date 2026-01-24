@@ -50,7 +50,7 @@ import {
   S_DEFRANGE_SUBFIELD_REGISTER,
   S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
   S_DEFRANGE_REGISTER_REL,
-  S_CALLEES, S_CALLERS,
+  S_CALLEES, S_CALLERS, S_INLINEES,
   type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType,
 } from "./constants.js";
 import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
@@ -529,6 +529,12 @@ export interface FunctionListSymbol {
   invocations: number[] | null;
 }
 
+/** List of inlined function IDs in a module (S_INLINEES). */
+export interface InlineesSymbol {
+  kind: "Inlinees";
+  inlinees: IdIndex[];
+}
+
 export type SymbolData =
   | ObjNameSymbol
   | RegisterVariableSymbol
@@ -568,7 +574,8 @@ export type SymbolData =
   | DefRangeSubfieldRegisterSymbol
   | DefRangeFramePointerRelFullScopeSymbol
   | DefRangeRegisterRelSymbol
-  | FunctionListSymbol;
+  | FunctionListSymbol
+  | InlineesSymbol;
 
 /** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
@@ -1103,6 +1110,15 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
         functions,
         invocations,
       };
+    }
+
+    case S_INLINEES: {
+      const count = buf.readU32();
+      const inlinees: IdIndex[] = [];
+      for (let i = 0; i < count; i++) {
+        inlinees.push(buf.readU32());
+      }
+      return { kind: "Inlinees", inlinees };
     }
 
     default:

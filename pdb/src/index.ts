@@ -175,6 +175,7 @@ export type {
   DefRangeFramePointerRelFullScopeSymbol,
   DefRangeRegisterRelSymbol,
   FunctionListSymbol,
+  InlineesSymbol,
 } from "./symbol/index.js";
 export {
   CPUType,
