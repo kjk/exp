@@ -143,7 +143,7 @@ function dumpSizeStats(filename: string): void {
   {
     const best = new Map<string, RawEntry>();
     for (const e of rawEntries) {
-      const key = `${e.offset.section}:${e.offset.offset}:${e.symbolName}`;
+      const key = `${e.offset.section}:${e.offset.offset}`;
       const prev = best.get(key);
       if (!prev ||
         (prev.moduleName === "(global)" && e.moduleName !== "(global)") ||
