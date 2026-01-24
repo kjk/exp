@@ -34,7 +34,6 @@ function getSymbolOffset(sym: SymbolData): PdbInternalSectionOffset | null {
     case "ThreadStorage":
     case "Block":
     case "SeparatedCode":
-    case "Label":
       return sym.offset;
     default:
       return null;
@@ -63,7 +62,6 @@ function getSymbolName(sym: SymbolData): string {
     case "Thunk":
     case "ThreadStorage":
     case "Block":
-    case "Label":
       return sym.name ?? "";
     default:
       return "";
@@ -211,7 +209,7 @@ function dumpSizeStats(filename: string): void {
       escapeCsv(e.symbolKind),
       escapeCsv(e.symbolName),
       `0x${e.rva.toString(16)}`,
-      e.size.toString(),
+      `0x${e.size.toString(16)}`,
     ].join(","));
   }
   fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
