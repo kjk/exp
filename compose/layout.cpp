@@ -167,24 +167,46 @@ MeasureResult RowPolicy::Measure(LayoutNodeVec children, Constraints constraints
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables;
-    placeables.reserve(n);
-    std::vector<int> widths;
-    widths.reserve(n);
+    std::vector<Placeable> placeables(n, Placeable(nullptr));
+    std::vector<int> widths(n, 0);
 
     int totalSpacing = config_.spacing * (n - 1);
     int remainingWidth = constraints.hasBoundedWidth()
                              ? constraints.maxWidth - totalSpacing
                              : Infinity;
 
-    for (auto* child : children) {
+    // Phase 1: Measure non-weighted children first.
+    float totalWeight = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float w = children[i]->weight();
+        if (w > 0.0f) {
+            totalWeight += w;
+            continue;
+        }
         int maxW = std::max(0, remainingWidth);
         Constraints childConstraints = {0, maxW, constraints.minHeight, constraints.maxHeight};
-        auto placeable = child->measure(childConstraints);
-        placeables.push_back(placeable);
-        widths.push_back(placeable.width());
+        placeables[i] = children[i]->measure(childConstraints);
+        widths[i] = placeables[i].width();
         if (remainingWidth != Infinity) {
-            remainingWidth -= placeable.width();
+            remainingWidth -= placeables[i].width();
+        }
+    }
+
+    // Phase 2: Distribute remaining space among weighted children.
+    if (totalWeight > 0.0f) {
+        int spaceForWeighted = std::max(0, remainingWidth);
+        for (int i = 0; i < n; i++) {
+            float w = children[i]->weight();
+            if (w <= 0.0f) continue;
+            int allocation = static_cast<int>(spaceForWeighted * (w / totalWeight));
+            Constraints childConstraints;
+            if (children[i]->fillWeight()) {
+                childConstraints = {allocation, allocation, constraints.minHeight, constraints.maxHeight};
+            } else {
+                childConstraints = {0, allocation, constraints.minHeight, constraints.maxHeight};
+            }
+            placeables[i] = children[i]->measure(childConstraints);
+            widths[i] = placeables[i].width();
         }
     }
 
@@ -215,24 +237,46 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables;
-    placeables.reserve(n);
-    std::vector<int> heights;
-    heights.reserve(n);
+    std::vector<Placeable> placeables(n, Placeable(nullptr));
+    std::vector<int> heights(n, 0);
 
     int totalSpacing = config_.spacing * (n - 1);
     int remainingHeight = constraints.hasBoundedHeight()
                               ? constraints.maxHeight - totalSpacing
                               : Infinity;
 
-    for (auto* child : children) {
+    // Phase 1: Measure non-weighted children first.
+    float totalWeight = 0.0f;
+    for (int i = 0; i < n; i++) {
+        float w = children[i]->weight();
+        if (w > 0.0f) {
+            totalWeight += w;
+            continue;
+        }
         int maxH = std::max(0, remainingHeight);
         Constraints childConstraints = {constraints.minWidth, constraints.maxWidth, 0, maxH};
-        auto placeable = child->measure(childConstraints);
-        placeables.push_back(placeable);
-        heights.push_back(placeable.height());
+        placeables[i] = children[i]->measure(childConstraints);
+        heights[i] = placeables[i].height();
         if (remainingHeight != Infinity) {
-            remainingHeight -= placeable.height();
+            remainingHeight -= placeables[i].height();
+        }
+    }
+
+    // Phase 2: Distribute remaining space among weighted children.
+    if (totalWeight > 0.0f) {
+        int spaceForWeighted = std::max(0, remainingHeight);
+        for (int i = 0; i < n; i++) {
+            float w = children[i]->weight();
+            if (w <= 0.0f) continue;
+            int allocation = static_cast<int>(spaceForWeighted * (w / totalWeight));
+            Constraints childConstraints;
+            if (children[i]->fillWeight()) {
+                childConstraints = {constraints.minWidth, constraints.maxWidth, allocation, allocation};
+            } else {
+                childConstraints = {constraints.minWidth, constraints.maxWidth, 0, allocation};
+            }
+            placeables[i] = children[i]->measure(childConstraints);
+            heights[i] = placeables[i].height();
         }
     }
 

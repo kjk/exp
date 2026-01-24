@@ -126,6 +126,8 @@ class LayoutNode {
     int x_ = 0;
     int y_ = 0;
     bool measured_ = false;
+    float weight_ = 0.0f;
+    bool fillWeight_ = true;
 
 public:
     explicit LayoutNode(MeasurePolicy* policy, LayoutNodeVec children = {});
@@ -133,6 +135,14 @@ public:
 
     Placeable measure(Constraints constraints);
     void place(int x, int y) { x_ = x; y_ = y; }
+
+    // Weight support for Row/Column proportional sizing.
+    // weight > 0 means this child participates in weighted distribution.
+    // fill=true: child gets exact constraints (must fill allocation).
+    // fill=false: child gets bounded constraints (can be smaller).
+    LayoutNode* setWeight(float w, bool fill = true) { weight_ = w; fillWeight_ = fill; return this; }
+    float weight() const { return weight_; }
+    bool fillWeight() const { return fillWeight_; }
 
     int measuredWidth() const { return measuredWidth_; }
     int measuredHeight() const { return measuredHeight_; }
