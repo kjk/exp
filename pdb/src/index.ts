@@ -63,6 +63,7 @@ export type {
   PointerType,
   ModifierType,
   ArrayType,
+  AliasType,
   BitfieldType,
   FieldListType,
   ArgumentListType,

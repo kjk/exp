@@ -271,6 +271,12 @@ export interface ArrayType {
   name: string;
 }
 
+export interface AliasType {
+  kind: "Alias";
+  underlyingType: TypeIndex;
+  name: string;
+}
+
 export interface BitfieldType {
   kind: "Bitfield";
   underlyingType: TypeIndex;
@@ -387,6 +393,7 @@ export type TypeData =
   | PointerType
   | ModifierType
   | ArrayType
+  | AliasType
   | BitfieldType
   | FieldListType
   | ArgumentListType

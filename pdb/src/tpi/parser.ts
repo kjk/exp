@@ -303,6 +303,13 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
       };
     }
 
+    case C.LF_ALIAS:
+    case C.LF_ALIAS_ST: {
+      const underlyingType: TypeIndex = buf.readU32();
+      const name = readTypeName(buf, kind);
+      return { kind: "Alias", underlyingType, name };
+    }
+
     case C.LF_BITFIELD: {
       const underlyingType: TypeIndex = buf.readU32();
       const length = buf.readU8();

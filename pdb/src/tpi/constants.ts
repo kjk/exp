@@ -40,6 +40,7 @@ export const LF_ENUM_ST = 0x1007;
 export const LF_PROCEDURE = 0x1008;
 export const LF_MFUNCTION = 0x1009;
 export const LF_COBOL0 = 0x100a;
+export const LF_ALIAS_ST = 0x1010;
 export const LF_BARRAY = 0x100b;
 export const LF_VFTPATH = 0x100d;
 
