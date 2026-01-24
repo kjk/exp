@@ -442,21 +442,29 @@ int ColumnPolicy::MaxIntrinsicHeight(LayoutNodeVec children, int width) {
 // 3. Each child is aligned within the box according to horizontalAlignment
 //    and verticalAlignment (Start, Center, or End on each axis).
 MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
-    if (children.empty()) {
+    int n = children.size();
+    if (n == 0) {
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables;
-    placeables.reserve(children.size());
+    std::vector<Placeable> placeables(n, Placeable(nullptr));
     Constraints childConstraints = config_.propagateMinConstraints
         ? constraints
         : constraints.loosen();
 
+    // Phase 1: Measure children that do NOT have matchParentSize.
+    // These determine the Box's own size.
     int maxWidth = 0;
     int maxHeight = 0;
-    for (auto* child : children) {
-        auto placeable = child->measure(childConstraints);
-        placeables.push_back(placeable);
+    bool hasMatchParent = false;
+    for (int i = 0; i < n; i++) {
+        if (children[i]->matchParentSize()) {
+            hasMatchParent = true;
+            continue;
+        }
+        placeables[i] = Placeable(children[i]);
+        auto placeable = children[i]->measure(childConstraints);
+        placeables[i] = placeable;
         maxWidth = std::max(maxWidth, placeable.width());
         maxHeight = std::max(maxHeight, placeable.height());
     }
@@ -464,10 +472,20 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
     int layoutWidth = constraints.constrainWidth(maxWidth);
     int layoutHeight = constraints.constrainHeight(maxHeight);
 
-    for (auto& p : placeables) {
-        int x = align(config_.horizontalAlignment, p.width(), layoutWidth);
-        int y = align(config_.verticalAlignment, p.height(), layoutHeight);
-        p.placeAt(x, y);
+    // Phase 2: Measure matchParentSize children with exact constraints
+    // equal to the resolved Box size.
+    if (hasMatchParent) {
+        Constraints matchConstraints = {layoutWidth, layoutWidth, layoutHeight, layoutHeight};
+        for (int i = 0; i < n; i++) {
+            if (!children[i]->matchParentSize()) continue;
+            placeables[i] = children[i]->measure(matchConstraints);
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        int x = align(config_.horizontalAlignment, placeables[i].width(), layoutWidth);
+        int y = align(config_.verticalAlignment, placeables[i].height(), layoutHeight);
+        placeables[i].placeAt(x, y);
     }
 
     return {layoutWidth, layoutHeight};
