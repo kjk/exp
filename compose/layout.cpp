@@ -441,6 +441,96 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
 }
 
 // ============================================================================
+// FlowColumnPolicy
+// ============================================================================
+
+// FlowColumn lays out children vertically, wrapping to the next column when a child
+// would overflow the available height. Each column is independently arranged, and
+// columns are placed horizontally with crossAxisSpacing between them.
+MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    int n = children.size();
+    if (n == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int maxHeight = constraints.hasBoundedHeight() ? constraints.maxHeight : Infinity;
+
+    // Phase 1: Measure all children with loosened constraints.
+    std::vector<Placeable> placeables;
+    placeables.reserve(n);
+    for (auto* child : children) {
+        Constraints childConstraints = {0, constraints.maxWidth, 0, maxHeight};
+        placeables.push_back(child->measure(childConstraints));
+    }
+
+    // Phase 2: Break children into columns based on available height.
+    struct Column {
+        int startIdx;
+        int count;
+        int width;   // widest item in this column
+        int height;  // total height of items + spacing
+    };
+    std::vector<Column> columns;
+    int colStart = 0;
+    int colHeight = 0;
+    int colWidth = 0;
+    int colCount = 0;
+
+    for (int i = 0; i < n; i++) {
+        int childHeight = placeables[i].height();
+        int spacingBefore = (colCount > 0) ? config_.mainAxisSpacing : 0;
+        int projectedHeight = colHeight + spacingBefore + childHeight;
+
+        bool overflow = (maxHeight != Infinity) && (projectedHeight > maxHeight) && (colCount > 0);
+        bool maxItems = (config_.maxItemsInEachColumn > 0) && (colCount >= config_.maxItemsInEachColumn);
+
+        if (overflow || maxItems) {
+            columns.push_back({colStart, colCount, colWidth, colHeight});
+            colStart = i;
+            colHeight = childHeight;
+            colWidth = placeables[i].width();
+            colCount = 1;
+        } else {
+            colHeight = projectedHeight;
+            colWidth = std::max(colWidth, placeables[i].width());
+            colCount++;
+        }
+    }
+    if (colCount > 0) {
+        columns.push_back({colStart, colCount, colWidth, colHeight});
+    }
+
+    // Phase 3: Compute layout size.
+    int layoutHeight = 0;
+    for (auto& col : columns) {
+        layoutHeight = std::max(layoutHeight, col.height);
+    }
+    layoutHeight = constraints.constrainHeight(layoutHeight);
+
+    int totalWidth = 0;
+    for (size_t ci = 0; ci < columns.size(); ci++) {
+        totalWidth += columns[ci].width;
+        if (ci > 0) totalWidth += config_.crossAxisSpacing;
+    }
+    int layoutWidth = constraints.constrainWidth(totalWidth);
+
+    // Phase 4: Place children column by column.
+    int xOffset = 0;
+    for (auto& col : columns) {
+        int yOffset = 0;
+        for (int i = 0; i < col.count; i++) {
+            int idx = col.startIdx + i;
+            int crossOffset = align(config_.crossAxisAlignment, placeables[idx].width(), col.width);
+            placeables[idx].placeAt(xOffset + crossOffset, yOffset);
+            yOffset += placeables[idx].height() + config_.mainAxisSpacing;
+        }
+        xOffset += col.width + config_.crossAxisSpacing;
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
 // FillMaxSizePolicy
 // ============================================================================
 
@@ -625,6 +715,14 @@ LayoutNode* Box(LayoutNodeVec children) {
 
 LayoutNode* FlowRow(LayoutNodeVec children) {
     return FlowRow({}, children);
+}
+
+LayoutNode* FlowColumn(FlowColumnConfig config, LayoutNodeVec children) {
+    return new LayoutNode(new FlowColumnPolicy(config), children);
+}
+
+LayoutNode* FlowColumn(LayoutNodeVec children) {
+    return FlowColumn({}, children);
 }
 
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children) {

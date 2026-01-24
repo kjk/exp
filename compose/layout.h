@@ -241,6 +241,20 @@ public:
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
 };
 
+struct FlowColumnConfig {
+    int mainAxisSpacing = 0;
+    int crossAxisSpacing = 0;
+    int maxItemsInEachColumn = 0;  // 0 = unlimited
+    Alignment crossAxisAlignment = Alignment::Start;
+};
+
+class FlowColumnPolicy : public MeasurePolicy {
+    FlowColumnConfig config_;
+public:
+    explicit FlowColumnPolicy(FlowColumnConfig config = {}) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
 // ============================================================================
 // Sizing modifier policies (constraint transformers)
 // ============================================================================
@@ -341,6 +355,8 @@ LayoutNode* Row(LayoutNodeVec children);
 LayoutNode* Column(LayoutNodeVec children);
 LayoutNode* Box(LayoutNodeVec children);
 LayoutNode* FlowRow(LayoutNodeVec children);
+LayoutNode* FlowColumn(FlowColumnConfig config, LayoutNodeVec children);
+LayoutNode* FlowColumn(LayoutNodeVec children);
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {});
 
 // Sizing modifier wrappers - each wraps a single child and transforms constraints.
