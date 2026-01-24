@@ -21,6 +21,7 @@ import {
   ItemFinder,
   MethodKind,
   MIN_TYPE_INDEX,
+  primitiveTypeName,
 } from "../src/index.js";
 
 type TypeSet = Set<TypeIndex>;
@@ -84,52 +85,6 @@ function typeName(
     default:
       return `Type${typeIndex} /* unhandled */`;
   }
-}
-
-/** Map primitive type indices to C++ names. */
-function primitiveTypeName(index: TypeIndex): string {
-  // The primitive type encoding:
-  // Low byte = type, bit 8..11 = indirection
-  const baseType = index & 0xff;
-  const indirection = (index >> 8) & 0x0f;
-
-  let name: string;
-  switch (baseType) {
-    case 0x00: name = "void"; break;
-    case 0x03: name = "void"; break; // void (alternate)
-    case 0x10: name = "char"; break;
-    case 0x20: name = "unsigned char"; break;
-    case 0x68: name = "int8_t"; break;
-    case 0x69: name = "uint8_t"; break;
-    case 0x70: name = "char"; break; // RCHAR
-    case 0x71: name = "wchar_t"; break;
-    case 0x7a: name = "char16_t"; break; // RChar16
-    case 0x7b: name = "char32_t"; break; // RChar32
-    case 0x7c: name = "char8_t"; break;  // C++20 char8_t
-    case 0x72: name = "int16_t"; break;
-    case 0x73: name = "uint16_t"; break;
-    case 0x74: name = "int32_t"; break;
-    case 0x75: name = "uint32_t"; break;
-    case 0x76: name = "int64_t"; break;
-    case 0x77: name = "uint64_t"; break;
-    case 0x11: name = "int16_t"; break;  // SHORT
-    case 0x21: name = "uint16_t"; break; // USHORT
-    case 0x12: name = "int32_t"; break;  // LONG
-    case 0x22: name = "uint32_t"; break; // ULONG
-    case 0x13: name = "int64_t"; break;  // QUAD
-    case 0x23: name = "uint64_t"; break; // UQUAD
-    case 0x40: name = "float"; break;
-    case 0x41: name = "double"; break;
-    case 0x30: name = "bool"; break;
-    default: name = `primitive_0x${baseType.toString(16)}`; break;
-  }
-
-  if (indirection > 0) {
-    // 0x04xx = near pointer, 0x06xx = 64-bit pointer, etc.
-    name += " *";
-  }
-
-  return name;
 }
 
 // ─── Data structures for output ───

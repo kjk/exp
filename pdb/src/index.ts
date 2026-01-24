@@ -94,6 +94,24 @@ export {
 } from "./tpi/types.js";
 export type { RawItem, TypeInformation } from "./tpi/parser.js";
 export { ItemFinder } from "./tpi/parser.js";
+export type { PrimitiveType, PrimitiveKind, Indirection } from "./tpi/primitive.js";
+export { parsePrimitiveType, primitiveTypeName } from "./tpi/primitive.js";
+export {
+  PrimitiveKind_NoType, PrimitiveKind_Void, PrimitiveKind_HRESULT,
+  PrimitiveKind_Char, PrimitiveKind_UChar, PrimitiveKind_I8, PrimitiveKind_U8,
+  PrimitiveKind_RChar, PrimitiveKind_WChar, PrimitiveKind_RChar16,
+  PrimitiveKind_RChar32, PrimitiveKind_Char8,
+  PrimitiveKind_Short, PrimitiveKind_UShort, PrimitiveKind_I16, PrimitiveKind_U16,
+  PrimitiveKind_Long, PrimitiveKind_ULong, PrimitiveKind_I32, PrimitiveKind_U32,
+  PrimitiveKind_Quad, PrimitiveKind_UQuad, PrimitiveKind_I64, PrimitiveKind_U64,
+  PrimitiveKind_Octa, PrimitiveKind_UOcta, PrimitiveKind_I128, PrimitiveKind_U128,
+  PrimitiveKind_F16, PrimitiveKind_F32, PrimitiveKind_F32PP, PrimitiveKind_F48,
+  PrimitiveKind_F64, PrimitiveKind_F80, PrimitiveKind_F128,
+  PrimitiveKind_Complex32, PrimitiveKind_Complex64, PrimitiveKind_Complex80, PrimitiveKind_Complex128,
+  PrimitiveKind_Bool8, PrimitiveKind_Bool16, PrimitiveKind_Bool32, PrimitiveKind_Bool64,
+  Indirection_Near16, Indirection_Far16, Indirection_Huge16,
+  Indirection_Near32, Indirection_Far32, Indirection_Near64, Indirection_Near128,
+} from "./tpi/primitive.js";
 export type {
   RawSymbol,
   SymbolData,
