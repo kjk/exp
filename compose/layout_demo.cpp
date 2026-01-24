@@ -37,13 +37,13 @@ static void example_row() {
     });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 188, "row width");
-    assert_eq(root->measuredHeight(), 40, "row height");
+    assert_eq(root->width(), 188, "row width");
+    assert_eq(root->height(), 40, "row height");
     printf("\n");
     freeTree(root);
 }
@@ -61,13 +61,13 @@ static void example_column() {
     });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 120, "column width");
-    assert_eq(root->measuredHeight(), 111, "column height");
+    assert_eq(root->width(), 120, "column width");
+    assert_eq(root->height(), 111, "column height");
     printf("\n");
     freeTree(root);
 }
@@ -87,13 +87,13 @@ static void example_box() {
         });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 200, "box width");
-    assert_eq(root->measuredHeight(), 200, "box height");
+    assert_eq(root->width(), 200, "box width");
+    assert_eq(root->height(), 200, "box height");
     printf("\n");
     freeTree(root);
 }
@@ -116,13 +116,13 @@ static void example_nested() {
     });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 115, "nested width");
-    assert_eq(root->measuredHeight(), 65, "nested height");
+    assert_eq(root->width(), 115, "nested width");
+    assert_eq(root->height(), 65, "nested height");
     printf("\n");
     freeTree(root);
 }
@@ -139,12 +139,12 @@ static void example_constrained() {
     });
 
     root->measure(Constraints::fixedWidth(100));
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 100, "constrained row width");
+    assert_eq(root->width(), 100, "constrained row width");
     printf("\n");
     freeTree(root);
 }
@@ -164,12 +164,12 @@ static void example_cross_alignment() {
         });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredHeight(), 60, "cross-align row height");
+    assert_eq(root->height(), 60, "cross-align row height");
     printf("\n");
     freeTree(root);
 }
@@ -189,12 +189,12 @@ static void example_space_between() {
         });
 
     root->measure(Constraints::fixed(300, 30));
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 300, "space-between width");
+    assert_eq(root->width(), 300, "space-between width");
     printf("\n");
     freeTree(root);
 }
@@ -216,10 +216,10 @@ public:
         int maxBottom = 0;
 
         for (auto* child : children) {
-            auto placeable = child->measure(constraints.loosen());
-            placeable.placeAt(offsetX, offsetY);
-            maxRight = std::max(maxRight, offsetX + placeable.width());
-            maxBottom = std::max(maxBottom, offsetY + placeable.height());
+            child->measure(constraints.loosen());
+            child->placeAt(offsetX, offsetY);
+            maxRight = std::max(maxRight, offsetX + child->width());
+            maxBottom = std::max(maxBottom, offsetY + child->height());
             offsetX += step_;
             offsetY += step_;
         }
@@ -239,13 +239,13 @@ static void example_custom_policy() {
     });
 
     root->measure(Constraints::unbounded());
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
-    assert_eq(root->measuredWidth(), 80, "diagonal width");
-    assert_eq(root->measuredHeight(), 80, "diagonal height");
+    assert_eq(root->width(), 80, "diagonal width");
+    assert_eq(root->height(), 80, "diagonal height");
     printf("\n");
     freeTree(root);
 }
@@ -271,14 +271,14 @@ static void example_flow_row() {
         });
 
     root->measure(Constraints::fixedWidth(100));
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
     // 3 lines: heights 20+6+20+6+20 = 72
-    assert_eq(root->measuredWidth(), 100, "flow row width");
-    assert_eq(root->measuredHeight(), 72, "flow row height");
+    assert_eq(root->width(), 100, "flow row width");
+    assert_eq(root->height(), 72, "flow row height");
     printf("\n");
     freeTree(root);
 }
@@ -304,15 +304,15 @@ static void example_flow_row_varying() {
         });
 
     root->measure(Constraints::fixedWidth(120));
-    root->place(0, 0);
+    root->placeAt(0, 0);
 
-    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printf("  root size: %d x %d\n", root->width(), root->height());
     printBounds(*root);
 
     // Line heights: max(25,30)=30, max(20,35)=35, 15
     // Total: 30+2+35+2+15 = 84
-    assert_eq(root->measuredWidth(), 120, "flow row varying width");
-    assert_eq(root->measuredHeight(), 84, "flow row varying height");
+    assert_eq(root->width(), 120, "flow row varying width");
+    assert_eq(root->height(), 84, "flow row varying height");
     printf("\n");
     freeTree(root);
 }

@@ -4,9 +4,9 @@
 //
 // Core protocol:
 //   1. Parent receives Constraints from its parent
-//   2. Parent's MeasurePolicy measures children: child.measure(childConstraints) -> Placeable
-//   3. Parent determines its own size from children's measured sizes
-//   4. Parent places children: placeable.placeAt(x, y)
+//   2. Parent's MeasurePolicy measures children: child->measure(childConstraints)
+//   3. Parent reads child->width() / child->height() for measured sizes
+//   4. Parent places children: child->placeAt(x, y)
 //
 // Usage:
 //   auto root = Column({.spacing = 8}, {
@@ -17,7 +17,7 @@
 //       }),
 //   });
 //   root->measure(Constraints::fixed(200, 400));
-//   root->place(0, 0);
+//   root->placeAt(0, 0);
 //   freeTree(root);  // caller owns the memory
 
 #include <algorithm>
@@ -88,23 +88,12 @@ struct LayoutNodeVec {
 void freeVec(LayoutNodeVec& vec);
 
 // ============================================================================
-// MeasureResult, Placeable, MeasurePolicy
+// MeasureResult, MeasurePolicy
 // ============================================================================
 
 struct MeasureResult {
     int width = 0;
     int height = 0;
-};
-
-class Placeable {
-    LayoutNode* node_;
-
-public:
-    explicit Placeable(LayoutNode* node) : node_(node) {}
-    int width() const;
-    int height() const;
-    void placeAt(int x, int y);
-    LayoutNode* node() const { return node_; }
 };
 
 class MeasurePolicy {
@@ -142,8 +131,8 @@ public:
     explicit LayoutNode(MeasurePolicy* policy, LayoutNodeVec children = {});
     ~LayoutNode();
 
-    Placeable measure(Constraints constraints);
-    void place(int x, int y) { x_ = x; y_ = y; }
+    LayoutNode* measure(Constraints constraints);
+    void placeAt(int x, int y) { x_ = x; y_ = y; }
 
     // Intrinsic measurement queries.
     int minIntrinsicWidth(int height);
@@ -165,8 +154,8 @@ public:
     LayoutNode* setMatchParentSize(bool v = true) { matchParentSize_ = v; return this; }
     bool matchParentSize() const { return matchParentSize_; }
 
-    int measuredWidth() const { return measuredWidth_; }
-    int measuredHeight() const { return measuredHeight_; }
+    int width() const { return measuredWidth_; }
+    int height() const { return measuredHeight_; }
     int x() const { return x_; }
     int y() const { return y_; }
     bool isMeasured() const { return measured_; }

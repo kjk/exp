@@ -24,14 +24,6 @@ void freeVec(LayoutNodeVec& vec) {
 }
 
 // ============================================================================
-// Placeable
-// ============================================================================
-
-int Placeable::width() const { return node_->measuredWidth(); }
-int Placeable::height() const { return node_->measuredHeight(); }
-void Placeable::placeAt(int x, int y) { node_->place(x, y); }
-
-// ============================================================================
 // LayoutNode
 // ============================================================================
 
@@ -84,14 +76,14 @@ int MeasurePolicy::MaxIntrinsicHeight(LayoutNodeVec children, int width) {
 // LayoutNode
 // ============================================================================
 
-Placeable LayoutNode::measure(Constraints constraints) {
+LayoutNode* LayoutNode::measure(Constraints constraints) {
     if (policy_) {
         auto result = policy_->Measure(children_, constraints);
         measuredWidth_ = constraints.constrainWidth(result.width);
         measuredHeight_ = constraints.constrainHeight(result.height);
     }
     measured_ = true;
-    return Placeable(this);
+    return this;
 }
 
 int LayoutNode::minIntrinsicWidth(int height) {
@@ -228,7 +220,6 @@ MeasureResult RowPolicy::Measure(LayoutNodeVec children, Constraints constraints
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables(n, Placeable(nullptr));
     std::vector<int> widths(n, 0);
 
     int totalSpacing = config_.spacing * (n - 1);
@@ -246,10 +237,10 @@ MeasureResult RowPolicy::Measure(LayoutNodeVec children, Constraints constraints
         }
         int maxW = std::max(0, remainingWidth);
         Constraints childConstraints = {0, maxW, constraints.minHeight, constraints.maxHeight};
-        placeables[i] = children[i]->measure(childConstraints);
-        widths[i] = placeables[i].width();
+        children[i]->measure(childConstraints);
+        widths[i] = children[i]->width();
         if (remainingWidth != Infinity) {
-            remainingWidth -= placeables[i].width();
+            remainingWidth -= children[i]->width();
         }
     }
 
@@ -266,23 +257,23 @@ MeasureResult RowPolicy::Measure(LayoutNodeVec children, Constraints constraints
             } else {
                 childConstraints = {0, allocation, constraints.minHeight, constraints.maxHeight};
             }
-            placeables[i] = children[i]->measure(childConstraints);
-            widths[i] = placeables[i].width();
+            children[i]->measure(childConstraints);
+            widths[i] = children[i]->width();
         }
     }
 
     int totalWidth = std::accumulate(widths.begin(), widths.end(), 0) + totalSpacing;
     int maxHeight = 0;
-    for (auto& p : placeables) {
-        maxHeight = std::max(maxHeight, p.height());
+    for (int i = 0; i < n; i++) {
+        maxHeight = std::max(maxHeight, children[i]->height());
     }
     int layoutWidth = constraints.constrainWidth(totalWidth);
     int layoutHeight = constraints.constrainHeight(maxHeight);
 
     auto positions = arrange(config_.arrangement, layoutWidth, widths, config_.spacing);
     for (int i = 0; i < n; i++) {
-        int crossOffset = align(config_.crossAxisAlignment, placeables[i].height(), layoutHeight);
-        placeables[i].placeAt(positions[i], crossOffset);
+        int crossOffset = align(config_.crossAxisAlignment, children[i]->height(), layoutHeight);
+        children[i]->placeAt(positions[i], crossOffset);
     }
 
     return {layoutWidth, layoutHeight};
@@ -334,7 +325,6 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables(n, Placeable(nullptr));
     std::vector<int> heights(n, 0);
 
     int totalSpacing = config_.spacing * (n - 1);
@@ -352,10 +342,10 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
         }
         int maxH = std::max(0, remainingHeight);
         Constraints childConstraints = {constraints.minWidth, constraints.maxWidth, 0, maxH};
-        placeables[i] = children[i]->measure(childConstraints);
-        heights[i] = placeables[i].height();
+        children[i]->measure(childConstraints);
+        heights[i] = children[i]->height();
         if (remainingHeight != Infinity) {
-            remainingHeight -= placeables[i].height();
+            remainingHeight -= children[i]->height();
         }
     }
 
@@ -372,23 +362,23 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
             } else {
                 childConstraints = {constraints.minWidth, constraints.maxWidth, 0, allocation};
             }
-            placeables[i] = children[i]->measure(childConstraints);
-            heights[i] = placeables[i].height();
+            children[i]->measure(childConstraints);
+            heights[i] = children[i]->height();
         }
     }
 
     int totalHeight = std::accumulate(heights.begin(), heights.end(), 0) + totalSpacing;
     int maxWidth = 0;
-    for (auto& p : placeables) {
-        maxWidth = std::max(maxWidth, p.width());
+    for (int i = 0; i < n; i++) {
+        maxWidth = std::max(maxWidth, children[i]->width());
     }
     int layoutWidth = constraints.constrainWidth(maxWidth);
     int layoutHeight = constraints.constrainHeight(totalHeight);
 
     auto positions = arrange(config_.arrangement, layoutHeight, heights, config_.spacing);
     for (int i = 0; i < n; i++) {
-        int crossOffset = align(config_.crossAxisAlignment, placeables[i].width(), layoutWidth);
-        placeables[i].placeAt(crossOffset, positions[i]);
+        int crossOffset = align(config_.crossAxisAlignment, children[i]->width(), layoutWidth);
+        children[i]->placeAt(crossOffset, positions[i]);
     }
 
     return {layoutWidth, layoutHeight};
@@ -447,7 +437,6 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
         return {constraints.minWidth, constraints.minHeight};
     }
 
-    std::vector<Placeable> placeables(n, Placeable(nullptr));
     Constraints childConstraints = config_.propagateMinConstraints
         ? constraints
         : constraints.loosen();
@@ -462,11 +451,9 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
             hasMatchParent = true;
             continue;
         }
-        placeables[i] = Placeable(children[i]);
-        auto placeable = children[i]->measure(childConstraints);
-        placeables[i] = placeable;
-        maxWidth = std::max(maxWidth, placeable.width());
-        maxHeight = std::max(maxHeight, placeable.height());
+        children[i]->measure(childConstraints);
+        maxWidth = std::max(maxWidth, children[i]->width());
+        maxHeight = std::max(maxHeight, children[i]->height());
     }
 
     int layoutWidth = constraints.constrainWidth(maxWidth);
@@ -478,14 +465,14 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
         Constraints matchConstraints = {layoutWidth, layoutWidth, layoutHeight, layoutHeight};
         for (int i = 0; i < n; i++) {
             if (!children[i]->matchParentSize()) continue;
-            placeables[i] = children[i]->measure(matchConstraints);
+            children[i]->measure(matchConstraints);
         }
     }
 
     for (int i = 0; i < n; i++) {
-        int x = align(config_.horizontalAlignment, placeables[i].width(), layoutWidth);
-        int y = align(config_.verticalAlignment, placeables[i].height(), layoutHeight);
-        placeables[i].placeAt(x, y);
+        int x = align(config_.horizontalAlignment, children[i]->width(), layoutWidth);
+        int y = align(config_.verticalAlignment, children[i]->height(), layoutHeight);
+        children[i]->placeAt(x, y);
     }
 
     return {layoutWidth, layoutHeight};
@@ -581,13 +568,12 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
 
     // Phase 1: Measure non-weighted children with loosened constraints.
     // Weighted children are deferred to per-line distribution.
-    std::vector<Placeable> placeables(n, Placeable(nullptr));
     std::vector<int> measuredWidths(n, 0);
     for (int i = 0; i < n; i++) {
         if (children[i]->weight() > 0.0f) continue;
         Constraints childConstraints = {0, maxWidth, 0, constraints.maxHeight};
-        placeables[i] = children[i]->measure(childConstraints);
-        measuredWidths[i] = placeables[i].width();
+        children[i]->measure(childConstraints);
+        measuredWidths[i] = children[i]->width();
     }
 
     // Phase 2: Break children into lines based on available width.
@@ -615,12 +601,12 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
             lines.push_back({lineStart, lineCount, lineWidth, lineHeight});
             lineStart = i;
             lineWidth = childWidth;
-            lineHeight = (children[i]->weight() > 0.0f) ? 0 : placeables[i].height();
+            lineHeight = (children[i]->weight() > 0.0f) ? 0 : children[i]->height();
             lineCount = 1;
         } else {
             lineWidth = projectedWidth;
             if (children[i]->weight() <= 0.0f) {
-                lineHeight = std::max(lineHeight, placeables[i].height());
+                lineHeight = std::max(lineHeight, children[i]->height());
             }
             lineCount++;
         }
@@ -686,9 +672,9 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
             } else {
                 wc = {0, allocation, 0, constraints.maxHeight};
             }
-            placeables[idx] = children[idx]->measure(wc);
-            measuredWidths[idx] = placeables[idx].width();
-            line.height = std::max(line.height, placeables[idx].height());
+            children[idx]->measure(wc);
+            measuredWidths[idx] = children[idx]->width();
+            line.height = std::max(line.height, children[idx]->height());
         }
         // Recalculate line width including weighted items.
         int newWidth = 0;
@@ -721,8 +707,8 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
         int xOffset = 0;
         for (int i = 0; i < line.count; i++) {
             int idx = line.startIdx + i;
-            int crossOffset = align(config_.crossAxisAlignment, placeables[idx].height(), line.height);
-            placeables[idx].placeAt(xOffset, yOffset + crossOffset);
+            int crossOffset = align(config_.crossAxisAlignment, children[idx]->height(), line.height);
+            children[idx]->placeAt(xOffset, yOffset + crossOffset);
             xOffset += measuredWidths[idx] + config_.mainAxisSpacing;
         }
         yOffset += line.height + config_.crossAxisSpacing;
@@ -748,13 +734,12 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
     int maxHeight = constraints.hasBoundedHeight() ? constraints.maxHeight : Infinity;
 
     // Phase 1: Measure non-weighted children with loosened constraints.
-    std::vector<Placeable> placeables(n, Placeable(nullptr));
     std::vector<int> measuredHeights(n, 0);
     for (int i = 0; i < n; i++) {
         if (children[i]->weight() > 0.0f) continue;
         Constraints childConstraints = {0, constraints.maxWidth, 0, maxHeight};
-        placeables[i] = children[i]->measure(childConstraints);
-        measuredHeights[i] = placeables[i].height();
+        children[i]->measure(childConstraints);
+        measuredHeights[i] = children[i]->height();
     }
 
     // Phase 2: Break children into columns based on available height.
@@ -782,12 +767,12 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
             columns.push_back({colStart, colCount, colWidth, colHeight});
             colStart = i;
             colHeight = childHeight;
-            colWidth = (children[i]->weight() > 0.0f) ? 0 : placeables[i].width();
+            colWidth = (children[i]->weight() > 0.0f) ? 0 : children[i]->width();
             colCount = 1;
         } else {
             colHeight = projectedHeight;
             if (children[i]->weight() <= 0.0f) {
-                colWidth = std::max(colWidth, placeables[i].width());
+                colWidth = std::max(colWidth, children[i]->width());
             }
             colCount++;
         }
@@ -838,9 +823,9 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
             } else {
                 wc = {0, constraints.maxWidth, 0, allocation};
             }
-            placeables[idx] = children[idx]->measure(wc);
-            measuredHeights[idx] = placeables[idx].height();
-            col.width = std::max(col.width, placeables[idx].width());
+            children[idx]->measure(wc);
+            measuredHeights[idx] = children[idx]->height();
+            col.width = std::max(col.width, children[idx]->width());
         }
         // Recalculate column height.
         int newHeight = 0;
@@ -873,8 +858,8 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
         int yOffset = 0;
         for (int i = 0; i < col.count; i++) {
             int idx = col.startIdx + i;
-            int crossOffset = align(config_.crossAxisAlignment, placeables[idx].width(), col.width);
-            placeables[idx].placeAt(xOffset + crossOffset, yOffset);
+            int crossOffset = align(config_.crossAxisAlignment, children[idx]->width(), col.width);
+            children[idx]->placeAt(xOffset + crossOffset, yOffset);
             yOffset += measuredHeights[idx] + config_.mainAxisSpacing;
         }
         xOffset += col.width + config_.crossAxisSpacing;
@@ -915,7 +900,7 @@ MeasureResult LazyColumnPolicy::Measure(LayoutNodeVec /*children*/, Constraints 
 
     // Phase 1: Measure visible items.
     struct ItemInfo {
-        Placeable placeable;
+        LayoutNode* node;
         int y;
     };
     std::vector<ItemInfo> items;
@@ -927,11 +912,11 @@ MeasureResult LazyColumnPolicy::Measure(LayoutNodeVec /*children*/, Constraints 
         composedNodes_.push_back(node);
 
         Constraints childConstraints = {0, constraints.maxWidth, 0, constraints.maxHeight};
-        auto placeable = node->measure(childConstraints);
+        node->measure(childConstraints);
 
-        items.push_back({placeable, y});
-        maxWidth = std::max(maxWidth, placeable.width());
-        y += placeable.height() + config_.spacing;
+        items.push_back({node, y});
+        maxWidth = std::max(maxWidth, node->width());
+        y += node->height() + config_.spacing;
     }
 
     int layoutWidth = constraints.constrainWidth(maxWidth);
@@ -941,8 +926,8 @@ MeasureResult LazyColumnPolicy::Measure(LayoutNodeVec /*children*/, Constraints 
 
     // Phase 2: Place items with cross-axis alignment.
     for (auto& item : items) {
-        int crossOffset = align(config_.crossAxisAlignment, item.placeable.width(), layoutWidth);
-        item.placeable.placeAt(crossOffset, item.y);
+        int crossOffset = align(config_.crossAxisAlignment, item.node->width(), layoutWidth);
+        item.node->placeAt(crossOffset, item.y);
     }
 
     return {layoutWidth, layoutHeight};
@@ -980,7 +965,7 @@ MeasureResult LazyRowPolicy::Measure(LayoutNodeVec /*children*/, Constraints con
 
     // Phase 1: Measure visible items.
     struct ItemInfo {
-        Placeable placeable;
+        LayoutNode* node;
         int x;
     };
     std::vector<ItemInfo> items;
@@ -992,11 +977,11 @@ MeasureResult LazyRowPolicy::Measure(LayoutNodeVec /*children*/, Constraints con
         composedNodes_.push_back(node);
 
         Constraints childConstraints = {0, constraints.maxWidth, 0, constraints.maxHeight};
-        auto placeable = node->measure(childConstraints);
+        node->measure(childConstraints);
 
-        items.push_back({placeable, x});
-        maxHeight = std::max(maxHeight, placeable.height());
-        x += placeable.width() + config_.spacing;
+        items.push_back({node, x});
+        maxHeight = std::max(maxHeight, node->height());
+        x += node->width() + config_.spacing;
     }
 
     int layoutWidth = constraints.hasBoundedWidth()
@@ -1006,8 +991,8 @@ MeasureResult LazyRowPolicy::Measure(LayoutNodeVec /*children*/, Constraints con
 
     // Phase 2: Place items with cross-axis alignment.
     for (auto& item : items) {
-        int crossOffset = align(config_.crossAxisAlignment, item.placeable.height(), layoutHeight);
-        item.placeable.placeAt(item.x, crossOffset);
+        int crossOffset = align(config_.crossAxisAlignment, item.node->height(), layoutHeight);
+        item.node->placeAt(item.x, crossOffset);
     }
 
     return {layoutWidth, layoutHeight};
@@ -1094,7 +1079,7 @@ MeasureResult LazyVerticalGridPolicy::Measure(LayoutNodeVec /*children*/, Constr
     int y = -firstVisibleItemOffset_;
 
     struct ItemPlacement {
-        Placeable placeable;
+        LayoutNode* node;
         int x, y;
     };
     std::vector<ItemPlacement> placements;
@@ -1104,7 +1089,6 @@ MeasureResult LazyVerticalGridPolicy::Measure(LayoutNodeVec /*children*/, Constr
 
         // Measure one row.
         int rowHeight = 0;
-        int rowStart = itemIdx;
         int rowCount = std::min(numCols, totalCount - itemIdx);
 
         for (int c = 0; c < rowCount; c++) {
@@ -1112,9 +1096,9 @@ MeasureResult LazyVerticalGridPolicy::Measure(LayoutNodeVec /*children*/, Constr
             composedNodes_.push_back(node);
 
             Constraints cellConstraints = {colWidths[c], colWidths[c], 0, constraints.maxHeight};
-            auto placeable = node->measure(cellConstraints);
-            rowHeight = std::max(rowHeight, placeable.height());
-            placements.push_back({placeable, colX[c], y});
+            node->measure(cellConstraints);
+            rowHeight = std::max(rowHeight, node->height());
+            placements.push_back({node, colX[c], y});
         }
 
         // Update y positions for items in this row (all share same y, height = rowHeight).
@@ -1128,7 +1112,7 @@ MeasureResult LazyVerticalGridPolicy::Measure(LayoutNodeVec /*children*/, Constr
 
     // Place all items.
     for (auto& p : placements) {
-        p.placeable.placeAt(p.x, p.y);
+        p.node->placeAt(p.x, p.y);
     }
 
     return {layoutWidth, layoutHeight};
@@ -1180,7 +1164,7 @@ MeasureResult LazyHorizontalGridPolicy::Measure(LayoutNodeVec /*children*/, Cons
     int x = -firstVisibleItemOffset_;
 
     struct ItemPlacement {
-        Placeable placeable;
+        LayoutNode* node;
         int x, y;
     };
     std::vector<ItemPlacement> placements;
@@ -1197,9 +1181,9 @@ MeasureResult LazyHorizontalGridPolicy::Measure(LayoutNodeVec /*children*/, Cons
             composedNodes_.push_back(node);
 
             Constraints cellConstraints = {0, constraints.maxWidth, rowHeights[r], rowHeights[r]};
-            auto placeable = node->measure(cellConstraints);
-            colWidth = std::max(colWidth, placeable.width());
-            placements.push_back({placeable, x, rowY[r]});
+            node->measure(cellConstraints);
+            colWidth = std::max(colWidth, node->width());
+            placements.push_back({node, x, rowY[r]});
         }
 
         x += colWidth + config_.mainAxisSpacing;
@@ -1212,7 +1196,7 @@ MeasureResult LazyHorizontalGridPolicy::Measure(LayoutNodeVec /*children*/, Cons
 
     // Place all items.
     for (auto& p : placements) {
-        p.placeable.placeAt(p.x, p.y);
+        p.node->placeAt(p.x, p.y);
     }
 
     return {layoutWidth, layoutHeight};
@@ -1235,9 +1219,9 @@ MeasureResult FillMaxSizePolicy::Measure(LayoutNodeVec children, Constraints con
         childConstraints.maxHeight = h;
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
-        placeable.placeAt(0, 0);
-        return {placeable.width(), placeable.height()};
+        auto* child = children[0]->measure(childConstraints);
+        child->placeAt(0, 0);
+        return {child->width(), child->height()};
     }
     return {childConstraints.minWidth, childConstraints.minHeight};
 }
@@ -1259,9 +1243,9 @@ MeasureResult SizePolicy::Measure(LayoutNodeVec children, Constraints constraint
         childConstraints.maxHeight = h;
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
-        placeable.placeAt(0, 0);
-        return {placeable.width(), placeable.height()};
+        auto* child = children[0]->measure(childConstraints);
+        child->placeAt(0, 0);
+        return {child->width(), child->height()};
     }
     return {childConstraints.minWidth, childConstraints.minHeight};
 }
@@ -1281,13 +1265,13 @@ MeasureResult RequiredSizePolicy::Measure(LayoutNodeVec children, Constraints co
         childConstraints.maxHeight = config_.height;
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
+        auto* child = children[0]->measure(childConstraints);
         // Center the child within the parent's allocated space.
-        int parentW = constraints.constrainWidth(placeable.width());
-        int parentH = constraints.constrainHeight(placeable.height());
-        int x = (parentW - placeable.width()) / 2;
-        int y = (parentH - placeable.height()) / 2;
-        placeable.placeAt(x, y);
+        int parentW = constraints.constrainWidth(child->width());
+        int parentH = constraints.constrainHeight(child->height());
+        int x = (parentW - child->width()) / 2;
+        int y = (parentH - child->height()) / 2;
+        child->placeAt(x, y);
         return {parentW, parentH};
     }
     int w = config_.width >= 0 ? constraints.constrainWidth(config_.width) : constraints.minWidth;
@@ -1308,13 +1292,13 @@ MeasureResult WrapContentPolicy::Measure(LayoutNodeVec children, Constraints con
         childConstraints.maxHeight = Infinity;
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
+        auto* child = children[0]->measure(childConstraints);
         // If child is smaller than parent's min, align within the min-sized space.
-        int parentW = constraints.constrainWidth(placeable.width());
-        int parentH = constraints.constrainHeight(placeable.height());
-        int x = align(config_.horizontalAlignment, placeable.width(), parentW);
-        int y = align(config_.verticalAlignment, placeable.height(), parentH);
-        placeable.placeAt(x, y);
+        int parentW = constraints.constrainWidth(child->width());
+        int parentH = constraints.constrainHeight(child->height());
+        int x = align(config_.horizontalAlignment, child->width(), parentW);
+        int y = align(config_.verticalAlignment, child->height(), parentH);
+        child->placeAt(x, y);
         return {parentW, parentH};
     }
     return {constraints.minWidth, constraints.minHeight};
@@ -1333,9 +1317,9 @@ MeasureResult DefaultMinSizePolicy::Measure(LayoutNodeVec children, Constraints 
         childConstraints.minHeight = std::min(config_.minHeight, childConstraints.maxHeight);
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
-        placeable.placeAt(0, 0);
-        return {placeable.width(), placeable.height()};
+        auto* child = children[0]->measure(childConstraints);
+        child->placeAt(0, 0);
+        return {child->width(), child->height()};
     }
     return {childConstraints.minWidth, childConstraints.minHeight};
 }
@@ -1358,9 +1342,9 @@ MeasureResult SizeInPolicy::Measure(LayoutNodeVec children, Constraints constrai
         childConstraints.minHeight = childConstraints.maxHeight;
     }
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
-        placeable.placeAt(0, 0);
-        return {placeable.width(), placeable.height()};
+        auto* child = children[0]->measure(childConstraints);
+        child->placeAt(0, 0);
+        return {child->width(), child->height()};
     }
     return {childConstraints.minWidth, childConstraints.minHeight};
 }
@@ -1417,9 +1401,9 @@ MeasureResult AspectRatioPolicy::Measure(LayoutNodeVec children, Constraints con
 
     Constraints childConstraints = {resolvedW, resolvedW, resolvedH, resolvedH};
     if (!children.empty()) {
-        auto placeable = children[0]->measure(childConstraints);
-        placeable.placeAt(0, 0);
-        return {placeable.width(), placeable.height()};
+        auto* child = children[0]->measure(childConstraints);
+        child->placeAt(0, 0);
+        return {child->width(), child->height()};
     }
     return {resolvedW, resolvedH};
 }
