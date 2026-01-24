@@ -250,6 +250,73 @@ static void example_custom_policy() {
     freeTree(root);
 }
 
+// ============================================================================
+// Example 9: FlowRow - wrapping horizontal layout
+// ============================================================================
+static void example_flow_row() {
+    printf("=== FlowRow in 100px width (spacing=4, crossSpacing=6) ===\n");
+
+    // 5 items of 40px each: can fit 2 per line in 100px (40+4+40=84 <= 100)
+    // Line 1: items 0,1 (width=84, height=20)
+    // Line 2: items 2,3 (width=84, height=20)
+    // Line 3: item 4   (width=40, height=20)
+    auto root = FlowRow(
+        {.mainAxisSpacing = 4, .crossAxisSpacing = 6},
+        {
+            Leaf({.width = 40, .height = 20}),
+            Leaf({.width = 40, .height = 20}),
+            Leaf({.width = 40, .height = 20}),
+            Leaf({.width = 40, .height = 20}),
+            Leaf({.width = 40, .height = 20}),
+        });
+
+    root->measure(Constraints::fixedWidth(100));
+    root->place(0, 0);
+
+    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printBounds(*root);
+
+    // 3 lines: heights 20+6+20+6+20 = 72
+    assert_eq(root->measuredWidth(), 100, "flow row width");
+    assert_eq(root->measuredHeight(), 72, "flow row height");
+    printf("\n");
+    freeTree(root);
+}
+
+// ============================================================================
+// Example 10: FlowRow with varying child sizes
+// ============================================================================
+static void example_flow_row_varying() {
+    printf("=== FlowRow varying sizes in 120px ===\n");
+
+    // Children: 50, 60, 40, 70, 30
+    // Line 1: 50+4+60 = 114 <= 120 => items 0,1
+    // Line 2: 40+4+70 = 114 <= 120 => items 2,3
+    // Line 3: 30 => item 4
+    auto root = FlowRow(
+        {.mainAxisSpacing = 4, .crossAxisSpacing = 2},
+        {
+            Leaf({.width = 50, .height = 25}),
+            Leaf({.width = 60, .height = 30}),
+            Leaf({.width = 40, .height = 20}),
+            Leaf({.width = 70, .height = 35}),
+            Leaf({.width = 30, .height = 15}),
+        });
+
+    root->measure(Constraints::fixedWidth(120));
+    root->place(0, 0);
+
+    printf("  root size: %d x %d\n", root->measuredWidth(), root->measuredHeight());
+    printBounds(*root);
+
+    // Line heights: max(25,30)=30, max(20,35)=35, 15
+    // Total: 30+2+35+2+15 = 84
+    assert_eq(root->measuredWidth(), 120, "flow row varying width");
+    assert_eq(root->measuredHeight(), 84, "flow row varying height");
+    printf("\n");
+    freeTree(root);
+}
+
 int main() {
     printf("Compose Layout Engine Demo\n");
     printf("==========================\n\n");
@@ -262,6 +329,8 @@ int main() {
     example_cross_alignment();
     example_space_between();
     example_custom_policy();
+    example_flow_row();
+    example_flow_row_varying();
 
     printf("All examples complete.\n");
     return 0;
