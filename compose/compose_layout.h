@@ -86,10 +86,46 @@ struct Constraints {
 };
 
 // ============================================================================
-// Forward declarations
+// LayoutNodeVec - lightweight array of LayoutNode pointers
 // ============================================================================
 
 class LayoutNode;
+
+struct LayoutNodeVec {
+    int len = 0;
+    LayoutNode** els = nullptr;
+
+    LayoutNodeVec() = default;
+
+    LayoutNodeVec(int len, LayoutNode** els) : len(len), els(els) {}
+
+    // Construct from initializer_list (allocates a copy)
+    LayoutNodeVec(std::initializer_list<LayoutNode*> list)
+        : len(static_cast<int>(list.size())),
+          els(list.size() ? new LayoutNode*[list.size()] : nullptr) {
+        int i = 0;
+        for (auto* node : list) {
+            els[i++] = node;
+        }
+    }
+
+    LayoutNode** begin() const { return els; }
+    LayoutNode** end() const { return els + len; }
+    bool empty() const { return len == 0; }
+    int size() const { return len; }
+    LayoutNode* operator[](int i) const { return els[i]; }
+};
+
+// Free the els array (does not free the nodes themselves).
+inline void freeVec(LayoutNodeVec& vec) {
+    delete[] vec.els;
+    vec.els = nullptr;
+    vec.len = 0;
+}
+
+// ============================================================================
+// Forward declarations
+// ============================================================================
 
 struct MeasureResult {
     int width = 0;
@@ -116,7 +152,7 @@ public:
 class MeasurePolicy {
 public:
     virtual ~MeasurePolicy() = default;
-    virtual MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) = 0;
+    virtual MeasureResult Measure(LayoutNodeVec children, Constraints constraints) = 0;
 };
 
 // ============================================================================
@@ -125,7 +161,7 @@ public:
 
 class LayoutNode {
     MeasurePolicy* policy_;
-    std::vector<LayoutNode*> children_;
+    LayoutNodeVec children_;
 
     // Measurement state
     int measuredWidth_ = 0;
@@ -135,17 +171,17 @@ class LayoutNode {
     bool measured_ = false;
 
 public:
-    explicit LayoutNode(MeasurePolicy* policy, std::initializer_list<LayoutNode*> children = {})
+    explicit LayoutNode(MeasurePolicy* policy, LayoutNodeVec children = {})
         : policy_(policy), children_(children) {}
 
-    LayoutNode(MeasurePolicy* policy, std::vector<LayoutNode*> children)
-        : policy_(policy), children_(std::move(children)) {}
-
-    ~LayoutNode() { delete policy_; }
+    ~LayoutNode() {
+        delete policy_;
+        delete[] children_.els;
+    }
 
     Placeable measure(Constraints constraints) {
         if (policy_) {
-            auto result = policy_->Measure(std::span(children_), constraints);
+            auto result = policy_->Measure(children_, constraints);
             measuredWidth_ = constraints.constrainWidth(result.width);
             measuredHeight_ = constraints.constrainHeight(result.height);
         }
@@ -164,7 +200,7 @@ public:
     int y() const { return y_; }
     bool isMeasured() const { return measured_; }
 
-    std::span<LayoutNode* const> children() const { return children_; }
+    LayoutNodeVec children() const { return children_; }
 
     struct Rect {
         int x, y, width, height;
@@ -186,7 +222,7 @@ inline int Placeable::width() const { return node_->measuredWidth(); }
 inline int Placeable::height() const { return node_->measuredHeight(); }
 inline void Placeable::placeAt(int x, int y) { node_->place(x, y); }
 
-// Recursively delete a tree of LayoutNodes (destructor handles policy deletion).
+// Recursively delete a tree of LayoutNodes (destructor handles policy and children array).
 inline void freeTree(LayoutNode* node) {
     if (!node) return;
     for (auto* child : node->children()) {
@@ -315,8 +351,8 @@ class RowPolicy : public MeasurePolicy {
 public:
     explicit RowPolicy(RowConfig config = {}) : config_(config) {}
 
-    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
-        int n = static_cast<int>(children.size());
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override {
+        int n = children.size();
         if (n == 0) {
             return {constraints.minWidth, constraints.minHeight};
         }
@@ -372,8 +408,8 @@ class ColumnPolicy : public MeasurePolicy {
 public:
     explicit ColumnPolicy(ColumnConfig config = {}) : config_(config) {}
 
-    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
-        int n = static_cast<int>(children.size());
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override {
+        int n = children.size();
         if (n == 0) {
             return {constraints.minWidth, constraints.minHeight};
         }
@@ -428,7 +464,7 @@ class BoxPolicy : public MeasurePolicy {
 public:
     explicit BoxPolicy(BoxConfig config = {}) : config_(config) {}
 
-    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override {
         if (children.empty()) {
             return {constraints.minWidth, constraints.minHeight};
         }
@@ -474,7 +510,7 @@ class LeafPolicy : public MeasurePolicy {
 public:
     explicit LeafPolicy(LeafConfig config) : config_(config) {}
 
-    MeasureResult Measure(std::span<LayoutNode*> /*children*/, Constraints constraints) override {
+    MeasureResult Measure(LayoutNodeVec /*children*/, Constraints constraints) override {
         return {constraints.constrainWidth(config_.width),
                 constraints.constrainHeight(config_.height)};
     }
@@ -488,31 +524,31 @@ inline LayoutNode* Leaf(LeafConfig config) {
     return new LayoutNode(new LeafPolicy(config));
 }
 
-inline LayoutNode* Row(RowConfig config, std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Row(RowConfig config, LayoutNodeVec children) {
     return new LayoutNode(new RowPolicy(config), children);
 }
 
-inline LayoutNode* Column(ColumnConfig config, std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Column(ColumnConfig config, LayoutNodeVec children) {
     return new LayoutNode(new ColumnPolicy(config), children);
 }
 
-inline LayoutNode* Box(BoxConfig config, std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Box(BoxConfig config, LayoutNodeVec children) {
     return new LayoutNode(new BoxPolicy(config), children);
 }
 
-inline LayoutNode* Row(std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Row(LayoutNodeVec children) {
     return Row({}, children);
 }
 
-inline LayoutNode* Column(std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Column(LayoutNodeVec children) {
     return Column({}, children);
 }
 
-inline LayoutNode* Box(std::initializer_list<LayoutNode*> children) {
+inline LayoutNode* Box(LayoutNodeVec children) {
     return Box({}, children);
 }
 
-inline LayoutNode* Layout(MeasurePolicy* policy, std::initializer_list<LayoutNode*> children = {}) {
+inline LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {}) {
     return new LayoutNode(policy, children);
 }
 

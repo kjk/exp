@@ -209,7 +209,7 @@ class DiagonalPolicy : public MeasurePolicy {
 public:
     explicit DiagonalPolicy(int step = 20) : step_(step) {}
 
-    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override {
         int offsetX = 0;
         int offsetY = 0;
         int maxRight = 0;
