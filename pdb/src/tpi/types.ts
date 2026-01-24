@@ -14,7 +14,9 @@ export interface TypeProperties {
   isScopedDefinition: boolean;
   hasUniqueName: boolean;
   isSealed: boolean;
+  hfa: HfaKind;
   isIntrinsic: boolean;
+  mocom: MocomUdtKind;
 }
 
 /** Parse a u16 properties bitfield. */
@@ -31,7 +33,9 @@ export function parseTypeProperties(raw: number): TypeProperties {
     isScopedDefinition: (raw & 0x0100) !== 0,
     hasUniqueName: (raw & 0x0200) !== 0,
     isSealed: (raw & 0x0400) !== 0,
+    hfa: ((raw >> 11) & 0x03) as HfaKind,
     isIntrinsic: (raw & 0x2000) !== 0,
+    mocom: ((raw >> 14) & 0x03) as MocomUdtKind,
   };
 }
 
@@ -98,6 +102,22 @@ export function isIntroVirtualMethod(attr: FieldAttributes): boolean {
     attr.mprop === MethodKind.PureIntroducingVirtual;
 }
 
+/** CV_HFA_e - Homogeneous Floating-point Aggregate kind. */
+export enum HfaKind {
+  None = 0,
+  Float = 1,
+  Double = 2,
+  Other = 3,
+}
+
+/** CV_MOCOM_UDT_e - MoCOM UDT kind. */
+export enum MocomUdtKind {
+  None = 0,
+  Ref = 1,
+  Value = 2,
+  Interface = 3,
+}
+
 /** The kind of a PointerType. */
 export enum PointerKind {
   Near16 = 0x00,
@@ -122,6 +142,19 @@ export enum PointerMode {
   Member = 0x02,
   MemberFunction = 0x03,
   RValueReference = 0x04,
+}
+
+/** CV_pmtype_e - Pointer-to-member representation type. */
+export enum PointerToMemberKind {
+  Undefined = 0x00,
+  DataSingle = 0x01,
+  DataMultiple = 0x02,
+  DataVirtual = 0x03,
+  DataGeneral = 0x04,
+  FunctionSingle = 0x05,
+  FunctionMultiple = 0x06,
+  FunctionVirtual = 0x07,
+  FunctionGeneral = 0x08,
 }
 
 /** Pointer attributes. */
@@ -215,6 +248,7 @@ export enum CallingConvention {
   SH5Call = 0x13,
   M32RCall = 0x14,
   ClrCall = 0x15,
+  Inline = 0x16,
   NearVector = 0x18,
 }
 

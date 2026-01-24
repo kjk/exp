@@ -343,3 +343,40 @@ export enum FrameCookieType {
   XorBasePointer = 2,
   XorR13 = 3,
 }
+
+/** CV_DISCARDED_e - Reason a symbol was discarded. */
+export enum DiscardedReason {
+  Unknown = 0,
+  NotSelected = 1,
+  NotReferenced = 2,
+}
+
+/** CV_LABEL_TYPE_e - Label address mode. */
+export enum LabelType {
+  Near = 0,
+  Far = 4,
+}
+
+/** CV_armswitchtype - ARM switch table entry type. */
+export enum ArmSwitchType {
+  Int1 = 0,
+  UInt1 = 1,
+  Int2 = 2,
+  UInt2 = 3,
+  Int4 = 4,
+  UInt4 = 5,
+  Pointer = 6,
+  UInt1Shl1 = 7,
+  UInt2Shl1 = 8,
+  Int1Shl1 = 9,
+  Int2Shl1 = 10,
+}
+
+/** CV_BuildInfo_e - Build information field indices. */
+export enum BuildInfoIndex {
+  CurrentDirectory = 0,
+  BuildTool = 1,
+  SourceFile = 2,
+  ProgramDatabaseFile = 3,
+  CommandArguments = 4,
+}
