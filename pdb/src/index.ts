@@ -79,6 +79,7 @@ export type {
   TypeProperties,
   FieldAttributes,
   PointerAttributes,
+  FunctionAttributes,
   ModifierFlags,
   FuncId,
   MemberFuncId,
@@ -91,6 +92,8 @@ export {
   MemberAccess,
   MethodKind,
   CallingConvention,
+  PointerKind,
+  PointerMode,
 } from "./tpi/types.js";
 export type { RawItem, TypeInformation } from "./tpi/parser.js";
 export { ItemFinder } from "./tpi/parser.js";

@@ -14,7 +14,8 @@ import {
   parseTypeProperties,
   parseFieldAttributes,
   parsePointerAttributes,
-  CallingConvention,
+  parseFunctionAttributes,
+  PointerMode,
   MethodKind,
 } from "./types.js";
 
@@ -123,15 +124,13 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
     case C.LF_CLASS_ST:
     case C.LF_STRUCTURE:
     case C.LF_STRUCTURE_ST:
-    case C.LF_STRUCTURE19:
     case C.LF_INTERFACE: {
       const count = buf.readU16();
       const properties = parseTypeProperties(buf.readU16());
       const fields = readTypeIndexOrNull(buf);
       const derivedFrom = readTypeIndexOrNull(buf);
       const vtableShape = readTypeIndexOrNull(buf);
-      const sizeVariant = buf.readVariant();
-      const size = sizeVariant.value;
+      const size = buf.readVariant().value;
       const name = readTypeName(buf, kind);
       const uniqueName = properties.hasUniqueName ? readTypeName(buf, kind) : null;
       const typeKind = kind === C.LF_INTERFACE
@@ -141,6 +140,29 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
           : "Structure" as const;
       return {
         kind: typeKind,
+        count,
+        properties,
+        fields: fields || null,
+        derivedFrom: derivedFrom || null,
+        vtableShape: vtableShape || null,
+        size,
+        name,
+        uniqueName,
+      };
+    }
+
+    // LF_STRUCTURE19 has a different field order from the regular LF_STRUCTURE
+    case C.LF_STRUCTURE19: {
+      const properties = parseTypeProperties(buf.readU32() & 0xffff);
+      const fields = readTypeIndexOrNull(buf);
+      const derivedFrom = readTypeIndexOrNull(buf);
+      const vtableShape = readTypeIndexOrNull(buf);
+      const count = buf.readU16();
+      const size = buf.readVariant().value;
+      const name = readTypeName(buf, kind);
+      const uniqueName = properties.hasUniqueName ? readTypeName(buf, kind) : null;
+      return {
+        kind: "Structure" as const,
         count,
         properties,
         fields: fields || null,
@@ -192,15 +214,17 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
     }
 
     case C.LF_PROCEDURE: {
-      const returnType: TypeIndex = buf.readU32();
-      const callingConvention = buf.readU8() as CallingConvention;
-      const _funcAttr = buf.readU8();
+      const returnTypeRaw: TypeIndex = buf.readU32();
+      const returnType = (returnTypeRaw === 0 || returnTypeRaw === 0xffff) ? null : returnTypeRaw;
+      const callConv = buf.readU8();
+      const funcAttr = buf.readU8();
+      const attributes = parseFunctionAttributes(callConv, funcAttr);
       const parameterCount = buf.readU16();
       const argumentList: TypeIndex = buf.readU32();
       return {
         kind: "Procedure",
         returnType,
-        callingConvention,
+        attributes,
         parameterCount,
         argumentList,
       };
@@ -209,9 +233,11 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
     case C.LF_MFUNCTION: {
       const returnType: TypeIndex = buf.readU32();
       const classType: TypeIndex = buf.readU32();
-      const thisType: TypeIndex = buf.readU32();
-      const callingConvention = buf.readU8() as CallingConvention;
-      const _funcAttr = buf.readU8();
+      const thisPointerTypeRaw: TypeIndex = buf.readU32();
+      const thisPointerType = (thisPointerTypeRaw === 0 || thisPointerTypeRaw === 0xffff) ? null : thisPointerTypeRaw;
+      const callConv = buf.readU8();
+      const funcAttr = buf.readU8();
+      const attributes = parseFunctionAttributes(callConv, funcAttr);
       const parameterCount = buf.readU16();
       const argumentList: TypeIndex = buf.readU32();
       const thisAdjustment = buf.readI32();
@@ -219,8 +245,8 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
         kind: "MemberFunction",
         returnType,
         classType,
-        thisType,
-        callingConvention,
+        thisPointerType,
+        attributes,
         parameterCount,
         argumentList,
         thisAdjustment,
@@ -231,8 +257,8 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
       const underlyingType: TypeIndex = buf.readU32();
       const attributes = parsePointerAttributes(buf.readU32());
       let containingClass: TypeIndex | null = null;
-      if (attributes.pointerMode === 2 || attributes.pointerMode === 3) {
-        // Pointer to member
+      if (attributes.pointerMode === PointerMode.Member ||
+          attributes.pointerMode === PointerMode.MemberFunction) {
         if (buf.remaining >= 4) {
           containingClass = buf.readU32();
         }
@@ -260,15 +286,18 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
     }
 
     case C.LF_ARRAY:
-    case C.LF_ARRAY_ST: {
+    case C.LF_ARRAY_ST:
+    case C.LF_STRIDED_ARRAY: {
       const elementType: TypeIndex = buf.readU32();
       const indexingType: TypeIndex = buf.readU32();
+      const stride: number | null = kind === C.LF_STRIDED_ARRAY ? buf.readU32() : null;
       const sizeVariant = buf.readVariant();
       const name = readTypeName(buf, kind);
       return {
         kind: "Array",
         elementType,
         indexingType,
+        stride,
         dimensions: [sizeVariant.value],
         name,
       };
@@ -368,13 +397,22 @@ function parseFieldRecord(buf: ParseBuffer, kind: number): TypeData | null {
 
     case C.LF_NESTTYPE:
     case C.LF_NESTTYPE_ST: {
+      buf.readU16(); // padding
+      const attributes = parseFieldAttributes(0);
+      const nestedType: TypeIndex = buf.readU32();
+      const name = readTypeName(buf, kind);
+      return { kind: "NestedType", attributes, nestedType, name };
+    }
+
+    case C.LF_NESTTYPEEX: {
       const attributes = parseFieldAttributes(buf.readU16());
       const nestedType: TypeIndex = buf.readU32();
       const name = readTypeName(buf, kind);
       return { kind: "NestedType", attributes, nestedType, name };
     }
 
-    case C.LF_BCLASS: {
+    case C.LF_BCLASS:
+    case C.LF_BINTERFACE: {
       const attributes = parseFieldAttributes(buf.readU16());
       const baseType: TypeIndex = buf.readU32();
       const offset = buf.readVariant();

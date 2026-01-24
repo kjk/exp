@@ -76,10 +76,36 @@ export function parseFieldAttributes(raw: number): FieldAttributes {
   };
 }
 
+/** The kind of a PointerType. */
+export enum PointerKind {
+  Near16 = 0x00,
+  Far16 = 0x01,
+  Huge16 = 0x02,
+  BaseSeg = 0x03,
+  BaseVal = 0x04,
+  BaseSegVal = 0x05,
+  BaseAddr = 0x06,
+  BaseSegAddr = 0x07,
+  BaseType = 0x08,
+  BaseSelf = 0x09,
+  Near32 = 0x0a,
+  Far32 = 0x0b,
+  Ptr64 = 0x0c,
+}
+
+/** The mode of a PointerType. */
+export enum PointerMode {
+  Pointer = 0x00,
+  LValueReference = 0x01,
+  Member = 0x02,
+  MemberFunction = 0x03,
+  RValueReference = 0x04,
+}
+
 /** Pointer attributes. */
 export interface PointerAttributes {
-  pointerKind: number;
-  pointerMode: number;
+  pointerKind: PointerKind;
+  pointerMode: PointerMode;
   isFlat32: boolean;
   isVolatile: boolean;
   isConst: boolean;
@@ -93,15 +119,25 @@ export interface PointerAttributes {
 
 /** Parse pointer attributes from a u32. */
 export function parsePointerAttributes(raw: number): PointerAttributes {
+  const pointerKind = (raw & 0x1f) as PointerKind;
+  const pointerMode = ((raw >> 5) & 0x07) as PointerMode;
+  let size = (raw >> 13) & 0x3f;
+  if (size === 0) {
+    if (pointerKind === PointerKind.Near32 || pointerKind === PointerKind.Far32) {
+      size = 4;
+    } else if (pointerKind === PointerKind.Ptr64) {
+      size = 8;
+    }
+  }
   return {
-    pointerKind: raw & 0x1f,
-    pointerMode: (raw >> 5) & 0x07,
+    pointerKind,
+    pointerMode,
     isFlat32: (raw & 0x0100) !== 0,
     isVolatile: (raw & 0x0200) !== 0,
     isConst: (raw & 0x0400) !== 0,
     isUnaligned: (raw & 0x0800) !== 0,
     isRestrict: (raw & 0x1000) !== 0,
-    size: (raw >> 13) & 0x3f,
+    size,
     isMocom: (raw & 0x00080000) !== 0,
     isLValueRef: (raw & 0x00100000) !== 0,
     isRValueRef: (raw & 0x00200000) !== 0,
@@ -113,6 +149,24 @@ export interface ModifierFlags {
   isConst: boolean;
   isVolatile: boolean;
   isUnaligned: boolean;
+}
+
+/** Function attributes (CV_funcattr_t combined with calling convention). */
+export interface FunctionAttributes {
+  callingConvention: CallingConvention;
+  cxxReturnUdt: boolean;
+  isConstructor: boolean;
+  isConstructorWithVirtualBases: boolean;
+}
+
+/** Parse function attributes from two consecutive u8 values (calling convention + funcattr). */
+export function parseFunctionAttributes(callConv: number, funcAttr: number): FunctionAttributes {
+  return {
+    callingConvention: callConv as CallingConvention,
+    cxxReturnUdt: (funcAttr & 0x01) !== 0,
+    isConstructor: (funcAttr & 0x02) !== 0,
+    isConstructorWithVirtualBases: (funcAttr & 0x04) !== 0,
+  };
 }
 
 /** Calling convention for procedures. */
@@ -178,8 +232,8 @@ export interface EnumerationType {
 
 export interface ProcedureType {
   kind: "Procedure";
-  returnType: TypeIndex;
-  callingConvention: CallingConvention;
+  returnType: TypeIndex | null;
+  attributes: FunctionAttributes;
   parameterCount: number;
   argumentList: TypeIndex;
 }
@@ -188,8 +242,8 @@ export interface MemberFunctionType {
   kind: "MemberFunction";
   returnType: TypeIndex;
   classType: TypeIndex;
-  thisType: TypeIndex;
-  callingConvention: CallingConvention;
+  thisPointerType: TypeIndex | null;
+  attributes: FunctionAttributes;
   parameterCount: number;
   argumentList: TypeIndex;
   thisAdjustment: number;
@@ -212,6 +266,7 @@ export interface ArrayType {
   kind: "Array";
   elementType: TypeIndex;
   indexingType: TypeIndex;
+  stride: number | null;
   dimensions: (number | bigint)[];
   name: string;
 }
