@@ -304,6 +304,99 @@ MeasureResult LeafPolicy::Measure(LayoutNodeVec /*children*/, Constraints constr
 }
 
 // ============================================================================
+// FlowRowPolicy
+// ============================================================================
+
+// FlowRow lays out children horizontally, wrapping to the next line when a child
+// would overflow the available width. Each line is independently arranged, and
+// lines are stacked vertically with crossAxisSpacing between them.
+MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    int n = children.size();
+    if (n == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int maxWidth = constraints.hasBoundedWidth() ? constraints.maxWidth : Infinity;
+
+    // Phase 1: Measure all children with loosened constraints (each child can be
+    // at most the full available width, no minimum forced).
+    std::vector<Placeable> placeables;
+    placeables.reserve(n);
+    for (auto* child : children) {
+        Constraints childConstraints = {0, maxWidth, 0, constraints.maxHeight};
+        placeables.push_back(child->measure(childConstraints));
+    }
+
+    // Phase 2: Break children into lines based on available width.
+    struct Line {
+        int startIdx;
+        int count;
+        int width;   // total width of items + spacing
+        int height;  // tallest item in this line
+    };
+    std::vector<Line> lines;
+    int lineStart = 0;
+    int lineWidth = 0;
+    int lineHeight = 0;
+    int lineCount = 0;
+
+    for (int i = 0; i < n; i++) {
+        int childWidth = placeables[i].width();
+        int spacingBefore = (lineCount > 0) ? config_.mainAxisSpacing : 0;
+        int projectedWidth = lineWidth + spacingBefore + childWidth;
+
+        bool overflow = (maxWidth != Infinity) && (projectedWidth > maxWidth) && (lineCount > 0);
+        bool maxItems = (config_.maxItemsInEachRow > 0) && (lineCount >= config_.maxItemsInEachRow);
+
+        if (overflow || maxItems) {
+            // Finalize current line
+            lines.push_back({lineStart, lineCount, lineWidth, lineHeight});
+            lineStart = i;
+            lineWidth = childWidth;
+            lineHeight = placeables[i].height();
+            lineCount = 1;
+        } else {
+            lineWidth = projectedWidth;
+            lineHeight = std::max(lineHeight, placeables[i].height());
+            lineCount++;
+        }
+    }
+    // Finalize last line
+    if (lineCount > 0) {
+        lines.push_back({lineStart, lineCount, lineWidth, lineHeight});
+    }
+
+    // Phase 3: Compute layout size.
+    int layoutWidth = 0;
+    for (auto& line : lines) {
+        layoutWidth = std::max(layoutWidth, line.width);
+    }
+    layoutWidth = constraints.constrainWidth(layoutWidth);
+
+    int totalHeight = 0;
+    for (size_t li = 0; li < lines.size(); li++) {
+        totalHeight += lines[li].height;
+        if (li > 0) totalHeight += config_.crossAxisSpacing;
+    }
+    int layoutHeight = constraints.constrainHeight(totalHeight);
+
+    // Phase 4: Place children line by line.
+    int yOffset = 0;
+    for (auto& line : lines) {
+        int xOffset = 0;
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            int crossOffset = align(config_.crossAxisAlignment, placeables[idx].height(), line.height);
+            placeables[idx].placeAt(xOffset, yOffset + crossOffset);
+            xOffset += placeables[idx].width() + config_.mainAxisSpacing;
+        }
+        yOffset += line.height + config_.crossAxisSpacing;
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
 // Builder functions
 // ============================================================================
 
@@ -323,6 +416,10 @@ LayoutNode* Box(BoxConfig config, LayoutNodeVec children) {
     return new LayoutNode(new BoxPolicy(config), children);
 }
 
+LayoutNode* FlowRow(FlowRowConfig config, LayoutNodeVec children) {
+    return new LayoutNode(new FlowRowPolicy(config), children);
+}
+
 LayoutNode* Row(LayoutNodeVec children) {
     return Row({}, children);
 }
@@ -333,6 +430,10 @@ LayoutNode* Column(LayoutNodeVec children) {
 
 LayoutNode* Box(LayoutNodeVec children) {
     return Box({}, children);
+}
+
+LayoutNode* FlowRow(LayoutNodeVec children) {
+    return FlowRow({}, children);
 }
 
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children) {

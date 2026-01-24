@@ -217,6 +217,20 @@ public:
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
 };
 
+struct FlowRowConfig {
+    int mainAxisSpacing = 0;
+    int crossAxisSpacing = 0;
+    int maxItemsInEachRow = 0;  // 0 = unlimited
+    Alignment crossAxisAlignment = Alignment::Start;
+};
+
+class FlowRowPolicy : public MeasurePolicy {
+    FlowRowConfig config_;
+public:
+    explicit FlowRowPolicy(FlowRowConfig config = {}) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
 // ============================================================================
 // Builder functions
 // ============================================================================
@@ -225,9 +239,11 @@ LayoutNode* Leaf(LeafConfig config);
 LayoutNode* Row(RowConfig config, LayoutNodeVec children);
 LayoutNode* Column(ColumnConfig config, LayoutNodeVec children);
 LayoutNode* Box(BoxConfig config, LayoutNodeVec children);
+LayoutNode* FlowRow(FlowRowConfig config, LayoutNodeVec children);
 LayoutNode* Row(LayoutNodeVec children);
 LayoutNode* Column(LayoutNodeVec children);
 LayoutNode* Box(LayoutNodeVec children);
+LayoutNode* FlowRow(LayoutNodeVec children);
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {});
 
 } // namespace compose
