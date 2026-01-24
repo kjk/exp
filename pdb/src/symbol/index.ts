@@ -1,89 +1,200 @@
-import { ParseBuffer, type Variant } from "./buffer.js";
-import { PdbError } from "./error.js";
-import type { MsfStream } from "./msf.js";
+import { ParseBuffer, type Variant } from "../buffer.js";
+import { PdbError } from "../error.js";
+import type { MsfStream } from "../msf.js";
 import type {
   TypeIndex,
+  IdIndex,
   PdbInternalSectionOffset,
   Register,
   SymbolIndex,
-} from "./common.js";
+} from "../common.js";
+import {
+  S_END, S_SKIP, S_ALIGN, S_PROC_ID_END, S_INLINESITE_END, S_ST_MAX,
+  S_OBJNAME_ST, S_OBJNAME,
+  S_REGISTER_ST, S_REGISTER,
+  S_CONSTANT_ST, S_CONSTANT,
+  S_UDT_ST, S_UDT,
+  S_LDATA32_ST, S_LDATA32, S_GDATA32_ST, S_GDATA32,
+  S_LMANDATA, S_GMANDATA,
+  S_PUB32_ST, S_PUB32,
+  S_LPROC32_ST, S_LPROC32, S_GPROC32_ST, S_GPROC32,
+  S_LPROC32_ID, S_GPROC32_ID,
+  S_LPROC32_DPC, S_LPROC32_DPC_ID,
+  S_LTHREAD32_ST, S_LTHREAD32, S_GTHREAD32_ST, S_GTHREAD32,
+  S_PROCREF_ST, S_PROCREF, S_LPROCREF_ST, S_LPROCREF,
+  S_DATAREF_ST, S_DATAREF,
+  S_ANNOTATIONREF,
+  S_TRAMPOLINE,
+  S_EXPORT,
+  S_LOCAL,
+  S_BUILDINFO,
+  S_INLINESITE, S_INLINESITE2,
+  S_COMPILE2, S_COMPILE3,
+  S_UNAMESPACE_ST, S_UNAMESPACE,
+  S_BPREL32, S_BPREL32_ST,
+  S_REGREL32, S_REGREL32_ST,
+  S_BLOCK32_ST, S_BLOCK32,
+  S_LABEL32_ST, S_LABEL32,
+  S_THUNK32_ST, S_THUNK32,
+  S_SEPCODE,
+  S_FRAMEPROC,
+  S_CALLSITEINFO,
+  S_ENVBLOCK,
+  S_SECTION,
+  S_COFFGROUP,
+  S_MANYREG_ST, S_MANYREG,
+  S_MANYREG2_ST, S_MANYREG2,
+  S_MANCONSTANT,
+  type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType,
+} from "./constants.js";
+import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
 
-// Symbol kind constants
-const S_END = 0x0006;
-const S_PROC_ID_END = 0x114f;
-const S_INLINESITE_END = 0x114e;
-const S_ST_MAX = 0x1100;
-
-// Key symbol kinds
-const S_OBJNAME_ST = 0x0009;
-const S_OBJNAME = 0x1101;
-const S_REGISTER_ST = 0x1001;
-const S_REGISTER = 0x1106;
-const S_CONSTANT_ST = 0x1002;
-const S_CONSTANT = 0x1107;
-const S_UDT_ST = 0x1003;
-const S_UDT = 0x1108;
-const S_LDATA32_ST = 0x1007;
-const S_LDATA32 = 0x110c;
-const S_GDATA32_ST = 0x1008;
-const S_GDATA32 = 0x110d;
-const S_PUB32_ST = 0x1009;
-const S_PUB32 = 0x110e;
-const S_LPROC32_ST = 0x100a;
-const S_LPROC32 = 0x110f;
-const S_GPROC32_ST = 0x100b;
-const S_GPROC32 = 0x1110;
-const S_LTHREAD32_ST = 0x100e;
-const S_LTHREAD32 = 0x1112;
-const S_GTHREAD32_ST = 0x100f;
-const S_GTHREAD32 = 0x1113;
-const S_LPROC32_ID = 0x1146;
-const S_GPROC32_ID = 0x1147;
-const S_LPROC32_DPC = 0x1155;
-const S_LPROC32_DPC_ID = 0x1156;
-const S_PROCREF_ST = 0x0400;
-const S_PROCREF = 0x1125;
-const S_LPROCREF_ST = 0x0403;
-const S_LPROCREF = 0x1127;
-const S_DATAREF_ST = 0x0401;
-const S_DATAREF = 0x1126;
-const S_ANNOTATIONREF = 0x1128;
-const S_TRAMPOLINE = 0x112c;
-const S_EXPORT = 0x1138;
-const S_LOCAL = 0x113e;
-const S_BUILDINFO = 0x114c;
-const S_INLINESITE = 0x114d;
-const S_INLINESITE2 = 0x115d;
-const S_COMPILE2 = 0x1116;
-const S_COMPILE3 = 0x113c;
-const S_UNAMESPACE_ST = 0x1029;
-const S_UNAMESPACE = 0x1124;
-const S_BPREL32 = 0x110b;
-const S_BPREL32_ST = 0x1006;
-const S_REGREL32 = 0x1111;
-const S_REGREL32_ST = 0x100d;
-const S_BLOCK32_ST = 0x0207;
-const S_BLOCK32 = 0x1103;
-const S_LABEL32_ST = 0x0209;
-const S_LABEL32 = 0x1105;
-const S_THUNK32_ST = 0x0206;
-const S_THUNK32 = 0x1102;
-const S_SEPCODE = 0x1132;
-const S_FRAMEPROC = 0x1012;
-const S_CALLSITEINFO = 0x1139;
-const S_ENVBLOCK = 0x113d;
-const S_SECTION = 0x1136;
-const S_COFFGROUP = 0x1137;
-const S_MANYREG_ST = 0x1005;
-const S_MANYREG = 0x110a;
-const S_MANYREG2_ST = 0x1014;
-const S_MANYREG2 = 0x1117;
+// Re-export everything from sub-modules
+export * from "./constants.js";
+export * from "./annotations.js";
 
 /** A raw symbol record. */
 export interface RawSymbol {
   index: SymbolIndex;
   kind: number;
   data: Uint8Array;
+}
+
+// ─── Flag Structures ───
+
+/** Procedure flags (CV_PROCFLAGS). */
+export interface ProcedureFlags {
+  nofpo: boolean;
+  interrupt: boolean;
+  farReturn: boolean;
+  neverReturn: boolean;
+  notReached: boolean;
+  customCallingConvention: boolean;
+  noInline: boolean;
+  optimizedDebugInfo: boolean;
+}
+
+/** Parse a u8 into ProcedureFlags. */
+function parseProcedureFlags(raw: number): ProcedureFlags {
+  return {
+    nofpo: (raw & 0x01) !== 0,
+    interrupt: (raw & 0x02) !== 0,
+    farReturn: (raw & 0x04) !== 0,
+    neverReturn: (raw & 0x08) !== 0,
+    notReached: (raw & 0x10) !== 0,
+    customCallingConvention: (raw & 0x20) !== 0,
+    noInline: (raw & 0x40) !== 0,
+    optimizedDebugInfo: (raw & 0x80) !== 0,
+  };
+}
+
+/** Compile flags from S_COMPILE2/S_COMPILE3. */
+export interface CompileFlags {
+  editAndContinue: boolean;
+  noDebugInfo: boolean;
+  linkTimeCodegen: boolean;
+  noDataAlign: boolean;
+  managed: boolean;
+  securityChecks: boolean;
+  hotPatch: boolean;
+  cvtcil: boolean;
+  msilModule: boolean;
+  sdl: boolean;
+  pgo: boolean;
+  expModule: boolean;
+}
+
+/** Parse compile flags from bits 8..31 of the flags u32. */
+function parseCompileFlags(raw: number): CompileFlags {
+  const flags = raw >>> 8;
+  return {
+    editAndContinue: (flags & 0x01) !== 0,
+    noDebugInfo: (flags & 0x02) !== 0,
+    linkTimeCodegen: (flags & 0x04) !== 0,
+    noDataAlign: (flags & 0x08) !== 0,
+    managed: (flags & 0x10) !== 0,
+    securityChecks: (flags & 0x20) !== 0,
+    hotPatch: (flags & 0x40) !== 0,
+    cvtcil: (flags & 0x80) !== 0,
+    msilModule: (flags & 0x100) !== 0,
+    sdl: (flags & 0x200) !== 0,
+    pgo: (flags & 0x400) !== 0,
+    expModule: (flags & 0x800) !== 0,
+  };
+}
+
+/** Compiler version information. */
+export interface CompilerVersion {
+  major: number;
+  minor: number;
+  build: number;
+  qfe: number | null;
+}
+
+/** Local variable flags. */
+export interface LocalVariableFlags {
+  isParam: boolean;
+  addressTaken: boolean;
+  compilerGenerated: boolean;
+  isAggregate: boolean;
+  isAliased: boolean;
+  isAlias: boolean;
+  isReturnValue: boolean;
+  isOptimizedOut: boolean;
+  isEnregisteredGlobal: boolean;
+  isEnregisteredStatic: boolean;
+}
+
+/** Parse a u16 into LocalVariableFlags. */
+function parseLocalVariableFlags(raw: number): LocalVariableFlags {
+  return {
+    isParam: (raw & 0x0001) !== 0,
+    addressTaken: (raw & 0x0002) !== 0,
+    compilerGenerated: (raw & 0x0004) !== 0,
+    isAggregate: (raw & 0x0008) !== 0,
+    isAliased: (raw & 0x0010) !== 0,
+    isAlias: (raw & 0x0020) !== 0,
+    isReturnValue: (raw & 0x0040) !== 0,
+    isOptimizedOut: (raw & 0x0080) !== 0,
+    isEnregisteredGlobal: (raw & 0x0100) !== 0,
+    isEnregisteredStatic: (raw & 0x0200) !== 0,
+  };
+}
+
+/** Export symbol flags. */
+export interface ExportSymbolFlags {
+  isConstant: boolean;
+  isData: boolean;
+  isPrivate: boolean;
+  hasNoName: boolean;
+  hasExplicitOrdinal: boolean;
+  isForwarder: boolean;
+}
+
+/** Parse a u16 into ExportSymbolFlags. */
+function parseExportSymbolFlags(raw: number): ExportSymbolFlags {
+  return {
+    isConstant: (raw & 0x0001) !== 0,
+    isData: (raw & 0x0002) !== 0,
+    isPrivate: (raw & 0x0004) !== 0,
+    hasNoName: (raw & 0x0008) !== 0,
+    hasExplicitOrdinal: (raw & 0x0010) !== 0,
+    isForwarder: (raw & 0x0020) !== 0,
+  };
+}
+
+/** Separated code flags. */
+export interface SeparatedCodeFlags {
+  isLexicalScope: boolean;
+  returnsToParent: boolean;
+}
+
+/** Parse a u32 into SeparatedCodeFlags. */
+function parseSeparatedCodeFlags(raw: number): SeparatedCodeFlags {
+  return {
+    isLexicalScope: (raw & 0x01) !== 0,
+    returnsToParent: (raw & 0x02) !== 0,
+  };
 }
 
 // ─── Symbol Data Types ───
@@ -101,8 +212,15 @@ export interface RegisterVariableSymbol {
   name: string;
 }
 
+export interface MultiRegisterVariableSymbol {
+  kind: "MultiRegisterVariable";
+  type: TypeIndex;
+  registers: { register: Register; name: string }[];
+}
+
 export interface ConstantSymbol {
   kind: "Constant";
+  managed: boolean;
   type: TypeIndex;
   value: Variant;
   name: string;
@@ -117,6 +235,7 @@ export interface UserDefinedTypeSymbol {
 export interface DataSymbol {
   kind: "Data";
   global: boolean;
+  managed: boolean;
   type: TypeIndex;
   offset: PdbInternalSectionOffset;
   name: string;
@@ -135,6 +254,7 @@ export interface PublicSymbol {
 export interface ProcedureSymbol {
   kind: "Procedure";
   global: boolean;
+  dpc: boolean;
   parent: SymbolIndex | null;
   end: SymbolIndex;
   next: SymbolIndex | null;
@@ -145,13 +265,6 @@ export interface ProcedureSymbol {
   offset: PdbInternalSectionOffset;
   flags: ProcedureFlags;
   name: string;
-}
-
-export interface ProcedureFlags {
-  nofpo: boolean;
-  interrupt: boolean;
-  farReturn: boolean;
-  neverReturn: boolean;
 }
 
 export interface ThreadStorageSymbol {
@@ -194,7 +307,7 @@ export interface AnnotationReferenceSymbol {
 
 export interface TrampolineSymbol {
   kind: "Trampoline";
-  trampolineType: number;
+  trampolineType: TrampolineType;
   thunkSize: number;
   thunkOffset: PdbInternalSectionOffset;
   targetOffset: PdbInternalSectionOffset;
@@ -203,27 +316,28 @@ export interface TrampolineSymbol {
 export interface ExportSymbol {
   kind: "Export";
   ordinal: number;
-  flags: number;
+  flags: ExportSymbolFlags;
   name: string;
 }
 
 export interface LocalSymbol {
   kind: "Local";
   type: TypeIndex;
-  flags: number;
+  flags: LocalVariableFlags;
   name: string;
 }
 
 export interface BuildInfoSymbol {
   kind: "BuildInfo";
-  id: number;
+  id: IdIndex;
 }
 
 export interface InlineSiteSymbol {
   kind: "InlineSite";
   parent: SymbolIndex | null;
   end: SymbolIndex;
-  inlinee: TypeIndex;
+  inlinee: IdIndex;
+  invocations: number | null;
   annotations: Uint8Array;
 }
 
@@ -239,7 +353,7 @@ export interface BlockSymbol {
 export interface LabelSymbol {
   kind: "Label";
   offset: PdbInternalSectionOffset;
-  flags: number;
+  flags: ProcedureFlags;
   name: string;
 }
 
@@ -275,10 +389,44 @@ export interface FrameProcedureSymbol {
 
 export interface CompileFlagsSymbol {
   kind: "CompileFlags";
-  language: number;
-  cpu: number;
-  flags: number;
+  language: SourceLanguage;
+  flags: CompileFlags;
+  cpuType: CPUType;
+  frontendVersion: CompilerVersion;
+  backendVersion: CompilerVersion;
   compilerVersion: string;
+}
+
+export interface ThunkSymbol {
+  kind: "Thunk";
+  parent: SymbolIndex | null;
+  end: SymbolIndex;
+  next: SymbolIndex | null;
+  offset: PdbInternalSectionOffset;
+  len: number;
+  thunkKind: ThunkKind;
+  name: string;
+}
+
+export interface SeparatedCodeSymbol {
+  kind: "SeparatedCode";
+  parent: SymbolIndex | null;
+  end: SymbolIndex;
+  len: number;
+  flags: SeparatedCodeFlags;
+  offset: PdbInternalSectionOffset;
+  parentOffset: PdbInternalSectionOffset;
+}
+
+export interface CallSiteInfoSymbol {
+  kind: "CallSiteInfo";
+  offset: PdbInternalSectionOffset;
+  type: TypeIndex;
+}
+
+export interface EnvironmentBlockSymbol {
+  kind: "EnvironmentBlock";
+  entries: string[];
 }
 
 export interface SectionSymbol {
@@ -302,6 +450,7 @@ export interface CoffGroupSymbol {
 export type SymbolData =
   | ObjNameSymbol
   | RegisterVariableSymbol
+  | MultiRegisterVariableSymbol
   | ConstantSymbol
   | UserDefinedTypeSymbol
   | DataSymbol
@@ -324,13 +473,16 @@ export type SymbolData =
   | RegisterRelativeSymbol
   | FrameProcedureSymbol
   | CompileFlagsSymbol
+  | ThunkSymbol
+  | SeparatedCodeSymbol
+  | CallSiteInfoSymbol
+  | EnvironmentBlockSymbol
   | SectionSymbol
   | CoffGroupSymbol;
 
-/** Iterator for symbol records. */
+/** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
   const buf = new ParseBuffer(data);
-  let offset = 0;
 
   while (!buf.isEmpty) {
     const startPos = buf.pos;
@@ -340,6 +492,8 @@ export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
     }
     const recordData = buf.take(length);
     const kind = recordData[0] | (recordData[1] << 8);
+    // Skip alignment/padding records
+    if (kind === S_ALIGN || kind === S_SKIP) continue;
     yield { index: startPos, kind, data: recordData };
   }
 }
@@ -379,12 +533,45 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       return { kind: "RegisterVariable", type, register, name };
     }
 
+    case S_MANYREG_ST:
+    case S_MANYREG: {
+      const type: TypeIndex = buf.readU32();
+      const count = buf.readU8();
+      const registers: { register: Register; name: string }[] = [];
+      for (let i = 0; i < count; i++) {
+        const register: Register = buf.readU8();
+        const name = parseSymbolName(buf, kind);
+        registers.push({ register, name });
+      }
+      return { kind: "MultiRegisterVariable", type, registers };
+    }
+
+    case S_MANYREG2_ST:
+    case S_MANYREG2: {
+      const type: TypeIndex = buf.readU32();
+      const count = buf.readU16();
+      const registers: { register: Register; name: string }[] = [];
+      for (let i = 0; i < count; i++) {
+        const register: Register = buf.readU16();
+        const name = parseSymbolName(buf, kind);
+        registers.push({ register, name });
+      }
+      return { kind: "MultiRegisterVariable", type, registers };
+    }
+
     case S_CONSTANT_ST:
     case S_CONSTANT: {
       const type: TypeIndex = buf.readU32();
       const value = buf.readVariant();
       const name = parseSymbolName(buf, kind);
-      return { kind: "Constant", type, value, name };
+      return { kind: "Constant", managed: false, type, value, name };
+    }
+
+    case S_MANCONSTANT: {
+      const type: TypeIndex = buf.readU32();
+      const value = buf.readVariant();
+      const name = buf.readCString();
+      return { kind: "Constant", managed: true, type, value, name };
     }
 
     case S_UDT_ST:
@@ -402,7 +589,16 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const type: TypeIndex = buf.readU32();
       const offset = readSectionOffset(buf);
       const name = parseSymbolName(buf, kind);
-      return { kind: "Data", global, type, offset, name };
+      return { kind: "Data", global, managed: false, type, offset, name };
+    }
+
+    case S_LMANDATA:
+    case S_GMANDATA: {
+      const global = kind === S_GMANDATA;
+      const type: TypeIndex = buf.readU32();
+      const offset = readSectionOffset(buf);
+      const name = buf.readCString();
+      return { kind: "Data", global, managed: true, type, offset, name };
     }
 
     case S_PUB32_ST:
@@ -433,6 +629,9 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
         kind === S_GPROC32 ||
         kind === S_GPROC32_ST ||
         kind === S_GPROC32_ID;
+      const dpc =
+        kind === S_LPROC32_DPC ||
+        kind === S_LPROC32_DPC_ID;
       const parent = readOptionalSymbolIndex(buf);
       const end: SymbolIndex = buf.readU32();
       const next = readOptionalSymbolIndex(buf);
@@ -441,17 +640,12 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const dbgEnd = buf.readU32();
       const type: TypeIndex = buf.readU32();
       const offset = readSectionOffset(buf);
-      const rawFlags = buf.readU8();
-      const flags: ProcedureFlags = {
-        nofpo: (rawFlags & 0x01) !== 0,
-        interrupt: (rawFlags & 0x02) !== 0,
-        farReturn: (rawFlags & 0x04) !== 0,
-        neverReturn: (rawFlags & 0x08) !== 0,
-      };
+      const flags = parseProcedureFlags(buf.readU8());
       const name = parseSymbolName(buf, kind);
       return {
         kind: "Procedure",
         global,
+        dpc,
         parent,
         end,
         next,
@@ -462,6 +656,48 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
         offset,
         flags,
         name,
+      };
+    }
+
+    case S_THUNK32_ST:
+    case S_THUNK32: {
+      const parent = readOptionalSymbolIndex(buf);
+      const end: SymbolIndex = buf.readU32();
+      const next = readOptionalSymbolIndex(buf);
+      const offsetVal = buf.readU32();
+      const section = buf.readU16();
+      const len = buf.readU16();
+      const thunkKind = buf.readU8() as ThunkKind;
+      const name = parseSymbolName(buf, kind);
+      return {
+        kind: "Thunk",
+        parent,
+        end,
+        next,
+        offset: { offset: offsetVal, section },
+        len,
+        thunkKind,
+        name,
+      };
+    }
+
+    case S_SEPCODE: {
+      const parent = readOptionalSymbolIndex(buf);
+      const end: SymbolIndex = buf.readU32();
+      const len = buf.readU32();
+      const flags = parseSeparatedCodeFlags(buf.readU32());
+      const offsetVal = buf.readU32();
+      const parentOffsetVal = buf.readU32();
+      const section = buf.readU16();
+      const parentSection = buf.readU16();
+      return {
+        kind: "SeparatedCode",
+        parent,
+        end,
+        len,
+        flags,
+        offset: { offset: offsetVal, section },
+        parentOffset: { offset: parentOffsetVal, section: parentSection },
       };
     }
 
@@ -512,7 +748,7 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
     }
 
     case S_TRAMPOLINE: {
-      const trampolineType = buf.readU16();
+      const trampolineType = buf.readU16() as TrampolineType;
       const thunkSize = buf.readU16();
       const thunkOff = buf.readU32();
       const targetOff = buf.readU32();
@@ -529,20 +765,20 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
 
     case S_EXPORT: {
       const ordinal = buf.readU16();
-      const flags = buf.readU16();
+      const flags = parseExportSymbolFlags(buf.readU16());
       const name = buf.readCString();
       return { kind: "Export", ordinal, flags, name };
     }
 
     case S_LOCAL: {
       const type: TypeIndex = buf.readU32();
-      const flags = buf.readU16();
+      const flags = parseLocalVariableFlags(buf.readU16());
       const name = buf.readCString();
       return { kind: "Local", type, flags, name };
     }
 
     case S_BUILDINFO: {
-      const id = buf.readU32();
+      const id: IdIndex = buf.readU32();
       return { kind: "BuildInfo", id };
     }
 
@@ -550,12 +786,13 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
     case S_INLINESITE2: {
       const parent = readOptionalSymbolIndex(buf);
       const end: SymbolIndex = buf.readU32();
-      const inlinee: TypeIndex = buf.readU32();
+      const inlinee: IdIndex = buf.readU32();
+      let invocations: number | null = null;
       if (kind === S_INLINESITE2) {
-        buf.readU32(); // invocations count
+        invocations = buf.readU32();
       }
       const annotations = buf.remainingBytes.slice();
-      return { kind: "InlineSite", parent, end, inlinee, annotations };
+      return { kind: "InlineSite", parent, end, inlinee, invocations, annotations };
     }
 
     case S_BLOCK32_ST:
@@ -571,7 +808,7 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
     case S_LABEL32_ST:
     case S_LABEL32: {
       const offset = readSectionOffset(buf);
-      const flags = buf.readU8();
+      const flags = parseProcedureFlags(buf.readU8());
       const name = parseSymbolName(buf, kind);
       return { kind: "Label", offset, flags, name };
     }
@@ -616,20 +853,21 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
 
     case S_COMPILE2:
     case S_COMPILE3: {
-      const flags = buf.readU32();
-      const language = flags & 0xff;
-      const cpu = buf.readU16();
+      const rawFlags = buf.readU32();
+      const language = sourceLanguageFromU8(rawFlags & 0xff);
+      const flags = parseCompileFlags(rawFlags);
+      const cpuType = cpuTypeFromU16(buf.readU16());
       const frontMajor = buf.readU16();
       const frontMinor = buf.readU16();
       const frontBuild = buf.readU16();
-      let frontQfe = 0;
+      let frontQfe: number | null = null;
       if (kind === S_COMPILE3) {
         frontQfe = buf.readU16();
       }
       const backMajor = buf.readU16();
       const backMinor = buf.readU16();
       const backBuild = buf.readU16();
-      let backQfe = 0;
+      let backQfe: number | null = null;
       if (kind === S_COMPILE3) {
         backQfe = buf.readU16();
       }
@@ -637,10 +875,30 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       return {
         kind: "CompileFlags",
         language,
-        cpu,
         flags,
+        cpuType,
+        frontendVersion: { major: frontMajor, minor: frontMinor, build: frontBuild, qfe: frontQfe },
+        backendVersion: { major: backMajor, minor: backMinor, build: backBuild, qfe: backQfe },
         compilerVersion,
       };
+    }
+
+    case S_CALLSITEINFO: {
+      const offset = readSectionOffset(buf);
+      buf.readU16(); // padding
+      const type: TypeIndex = buf.readU32();
+      return { kind: "CallSiteInfo", offset, type };
+    }
+
+    case S_ENVBLOCK: {
+      buf.readU8(); // flags (reserved)
+      const entries: string[] = [];
+      while (!buf.isEmpty) {
+        const s = buf.readCString();
+        if (s.length === 0) break;
+        entries.push(s);
+      }
+      return { kind: "EnvironmentBlock", entries };
     }
 
     case S_SECTION: {
@@ -695,4 +953,40 @@ function parseOptionalName(buf: ParseBuffer, kind: number): string | null {
   }
   if (buf.isEmpty) return null;
   return buf.readCString();
+}
+
+/** Returns true if the given symbol kind starts a new scope. */
+export function symbolStartsScope(kind: number): boolean {
+  switch (kind) {
+    case S_GPROC32:
+    case S_LPROC32:
+    case S_GPROC32_ID:
+    case S_LPROC32_ID:
+    case S_LPROC32_DPC:
+    case S_LPROC32_DPC_ID:
+    case S_GPROC32_ST:
+    case S_LPROC32_ST:
+    case S_THUNK32:
+    case S_THUNK32_ST:
+    case S_BLOCK32:
+    case S_BLOCK32_ST:
+    case S_SEPCODE:
+    case S_INLINESITE:
+    case S_INLINESITE2:
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** Returns true if the given symbol kind ends a scope. */
+export function symbolEndsScope(kind: number): boolean {
+  switch (kind) {
+    case S_END:
+    case S_PROC_ID_END:
+    case S_INLINESITE_END:
+      return true;
+    default:
+      return false;
+  }
 }

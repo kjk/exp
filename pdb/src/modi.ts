@@ -2,7 +2,7 @@ import { ParseBuffer } from "./buffer.js";
 import { PdbError } from "./error.js";
 import type { MsfStream } from "./msf.js";
 import type { DbiModule } from "./dbi.js";
-import { type RawSymbol, iterateSymbols } from "./symbols.js";
+import { type RawSymbol, iterateSymbols } from "./symbol/index.js";
 import type { PdbInternalSectionOffset, FileIndex, StringRef } from "./common.js";
 
 const CV_SIGNATURE_C13 = 4;

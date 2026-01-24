@@ -129,11 +129,13 @@ export type {
   SymbolData,
   ObjNameSymbol,
   RegisterVariableSymbol,
+  MultiRegisterVariableSymbol,
   ConstantSymbol,
   UserDefinedTypeSymbol,
   DataSymbol,
   PublicSymbol,
   ProcedureSymbol,
+  ProcedureFlags,
   ThreadStorageSymbol,
   UsingNamespaceSymbol,
   ProcedureReferenceSymbol,
@@ -141,7 +143,9 @@ export type {
   AnnotationReferenceSymbol,
   TrampolineSymbol,
   ExportSymbol,
+  ExportSymbolFlags,
   LocalSymbol,
+  LocalVariableFlags,
   BuildInfoSymbol,
   InlineSiteSymbol,
   BlockSymbol,
@@ -151,7 +155,28 @@ export type {
   RegisterRelativeSymbol,
   FrameProcedureSymbol,
   CompileFlagsSymbol,
-} from "./symbols.js";
+  CompileFlags,
+  CompilerVersion,
+  ThunkSymbol,
+  SeparatedCodeSymbol,
+  SeparatedCodeFlags,
+  CallSiteInfoSymbol,
+  EnvironmentBlockSymbol,
+  SectionSymbol,
+  CoffGroupSymbol,
+  BinaryAnnotation,
+} from "./symbol/index.js";
+export {
+  CPUType,
+  SourceLanguage,
+  ThunkKind,
+  TrampolineType,
+  symbolStartsScope,
+  symbolEndsScope,
+  iterateBinaryAnnotations,
+  BinaryAnnotationsIter,
+  annotationEmitsLineInfo,
+} from "./symbol/index.js";
 export type {
   LineInfo,
   FileChecksum,
@@ -165,7 +190,7 @@ import { parsePdbInformation, parseStreamNames, type PdbInformation, type Stream
 import { parseDebugInformation, type DebugInformation, type DbiModule, type DbiExtraStreams } from "./dbi.js";
 import { parseItemInformation, parseTypeData, parseIdData, ItemFinder, type TypeInformation, type RawItem } from "./tpi/parser.js";
 import type { TypeData, IdData } from "./tpi/types.js";
-import { parseSymbolTable, parseSymbolData, type RawSymbol, type SymbolData } from "./symbols.js";
+import { parseSymbolTable, parseSymbolData, type RawSymbol, type SymbolData } from "./symbol/index.js";
 import { parseModuleInfo, type ModuleInfo } from "./modi.js";
 import { buildAddressMap, parseSectionHeaders, AddressMap } from "./address-map.js";
 import { parseStringTable, StringTable } from "./string-table.js";
