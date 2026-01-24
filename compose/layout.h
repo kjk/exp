@@ -372,6 +372,20 @@ public:
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
 };
 
+// Attempts to size content to a given width/height ratio by trying constraint
+// combinations in priority order. ratio = width / height.
+struct AspectRatioConfig {
+    float ratio = 1.0f;                   // width / height
+    bool matchHeightConstraintsFirst = false;
+};
+
+class AspectRatioPolicy : public MeasurePolicy {
+    AspectRatioConfig config_;
+public:
+    explicit AspectRatioPolicy(AspectRatioConfig config) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
 // ============================================================================
 // Builder functions
 // ============================================================================
@@ -400,5 +414,7 @@ LayoutNode* RequiredSize(LayoutNode* child, int width, int height);
 LayoutNode* WrapContent(LayoutNode* child, WrapContentConfig config = {});
 LayoutNode* DefaultMinSize(LayoutNode* child, DefaultMinSizeConfig config);
 LayoutNode* SizeIn(LayoutNode* child, SizeInConfig config);
+LayoutNode* AspectRatio(LayoutNode* child, AspectRatioConfig config);
+LayoutNode* AspectRatio(LayoutNode* child, float ratio);
 
 } // namespace compose

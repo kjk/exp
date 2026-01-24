@@ -859,6 +859,65 @@ MeasureResult SizeInPolicy::Measure(LayoutNodeVec children, Constraints constrai
 }
 
 // ============================================================================
+// AspectRatioPolicy
+// ============================================================================
+
+MeasureResult AspectRatioPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    // Try to find a width/height pair that satisfies the aspect ratio and fits
+    // within constraints. The priority order depends on matchHeightConstraintsFirst.
+    auto satisfies = [&](int w, int h) -> bool {
+        return w >= constraints.minWidth && w <= constraints.maxWidth &&
+               h >= constraints.minHeight && h <= constraints.maxHeight;
+    };
+
+    struct Attempt { int width; int height; };
+    Attempt attempts[4];
+
+    if (!config_.matchHeightConstraintsFirst) {
+        // Width-first priority
+        attempts[0] = {constraints.maxWidth,
+                       static_cast<int>(constraints.maxWidth / config_.ratio)};
+        attempts[1] = {static_cast<int>(constraints.maxHeight * config_.ratio),
+                       constraints.maxHeight};
+        attempts[2] = {constraints.minWidth,
+                       static_cast<int>(constraints.minWidth / config_.ratio)};
+        attempts[3] = {static_cast<int>(constraints.minHeight * config_.ratio),
+                       constraints.minHeight};
+    } else {
+        // Height-first priority
+        attempts[0] = {static_cast<int>(constraints.maxHeight * config_.ratio),
+                       constraints.maxHeight};
+        attempts[1] = {constraints.maxWidth,
+                       static_cast<int>(constraints.maxWidth / config_.ratio)};
+        attempts[2] = {static_cast<int>(constraints.minHeight * config_.ratio),
+                       constraints.minHeight};
+        attempts[3] = {constraints.minWidth,
+                       static_cast<int>(constraints.minWidth / config_.ratio)};
+    }
+
+    int resolvedW = constraints.minWidth;
+    int resolvedH = constraints.minHeight;
+
+    for (auto& a : attempts) {
+        // Skip unbounded attempts
+        if (a.width == Infinity || a.height == Infinity) continue;
+        if (satisfies(a.width, a.height)) {
+            resolvedW = a.width;
+            resolvedH = a.height;
+            break;
+        }
+    }
+
+    Constraints childConstraints = {resolvedW, resolvedW, resolvedH, resolvedH};
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        placeable.placeAt(0, 0);
+        return {placeable.width(), placeable.height()};
+    }
+    return {resolvedW, resolvedH};
+}
+
+// ============================================================================
 // Builder functions
 // ============================================================================
 
@@ -948,6 +1007,14 @@ LayoutNode* DefaultMinSize(LayoutNode* child, DefaultMinSizeConfig config) {
 
 LayoutNode* SizeIn(LayoutNode* child, SizeInConfig config) {
     return new LayoutNode(new SizeInPolicy(config), {child});
+}
+
+LayoutNode* AspectRatio(LayoutNode* child, AspectRatioConfig config) {
+    return new LayoutNode(new AspectRatioPolicy(config), {child});
+}
+
+LayoutNode* AspectRatio(LayoutNode* child, float ratio) {
+    return AspectRatio(child, {.ratio = ratio});
 }
 
 } // namespace compose
