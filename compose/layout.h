@@ -228,6 +228,9 @@ public:
 struct BoxConfig {
     Alignment horizontalAlignment = Alignment::Start;
     Alignment verticalAlignment = Alignment::Start;
+    // When true, passes parent min constraints through to children.
+    // When false (default), loosens constraints (sets min to 0).
+    bool propagateMinConstraints = false;
 };
 
 class BoxPolicy : public MeasurePolicy {
