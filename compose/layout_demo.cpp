@@ -1,9 +1,9 @@
-// compose_layout_demo.cpp - Demonstrates the Compose-style layout engine.
+// layout_demo.cpp - Demonstrates the Compose-style layout engine.
 //
-// Build: clang++ -std=c++20 -o compose_layout_demo compose_layout_demo.cpp
-//    or: g++ -std=c++20 -o compose_layout_demo compose_layout_demo.cpp
+// Build: clang++ -std=c++20 -o layout_demo layout.cpp layout_demo.cpp
+//    or: g++ -std=c++20 -o layout_demo layout.cpp layout_demo.cpp
 
-#include "compose_layout.h"
+#include "layout.h"
 
 #include <cstdio>
 
