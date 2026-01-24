@@ -396,11 +396,28 @@ export interface EnumerateType {
   name: string;
 }
 
+/** Virtual table shape descriptor (packed 4-bit values). */
+export enum VirtualTableShapeDescriptor {
+  Near = 0x00,
+  Far = 0x01,
+  Thin = 0x02,
+  Outer = 0x03,
+  Meta = 0x04,
+  Near32 = 0x05,
+  Far32 = 0x06,
+  Unused = 0x07,
+}
+
+export interface VirtualTableShapeType {
+  kind: "VirtualTableShape";
+  descriptors: VirtualTableShapeDescriptor[];
+}
+
 export interface VirtualFunctionTableType {
   kind: "VirtualFunctionTable";
-  completeClass: TypeIndex;
-  overriddenVft: TypeIndex;
-  vftEntries: number;
+  owner: TypeIndex;
+  base: TypeIndex;
+  objectOffset: number;
   names: string[];
 }
 
@@ -426,10 +443,11 @@ export type TypeData =
   | BaseClassType
   | VirtualBaseClassType
   | VirtualFunctionTablePointerType
+  | VirtualFunctionTableType
+  | VirtualTableShapeType
   | OverloadedMethodType
   | MethodType
-  | EnumerateType
-  | VirtualFunctionTableType;
+  | EnumerateType;
 
 // ─── Id Data Types ───
 

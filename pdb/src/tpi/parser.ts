@@ -370,6 +370,34 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
       return { kind: "MethodList", methods };
     }
 
+    case C.LF_VTSHAPE: {
+      const count = buf.readU16();
+      const descriptors: number[] = [];
+      for (let i = 0; i < Math.ceil(count / 2); i++) {
+        const byte = buf.readU8();
+        descriptors.push(byte & 0x0f);
+        if (descriptors.length < count) {
+          descriptors.push((byte >> 4) & 0x0f);
+        }
+      }
+      return { kind: "VirtualTableShape", descriptors };
+    }
+
+    case C.LF_VFTABLE: {
+      const owner: TypeIndex = buf.readU32();
+      const base: TypeIndex = buf.readU32();
+      const objectOffset = buf.readVariant().value as number;
+      const namesLength = buf.readVariant().value as number;
+      const names: string[] = [];
+      let bytesRead = 0;
+      while (bytesRead < namesLength) {
+        const name = buf.readCString();
+        bytesRead += name.length + 1;
+        names.push(name);
+      }
+      return { kind: "VirtualFunctionTable", owner, base, objectOffset, names };
+    }
+
     default:
       throw PdbError.unimplementedTypeKind(kind);
   }
