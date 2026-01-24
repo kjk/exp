@@ -242,6 +242,93 @@ public:
 };
 
 // ============================================================================
+// Sizing modifier policies (constraint transformers)
+// ============================================================================
+
+// Makes constraints exact: min=max*fraction. If max is unbounded, has no effect.
+// A negative fraction means "don't affect this axis".
+struct FillMaxSizeConfig {
+    float widthFraction = 1.0f;
+    float heightFraction = 1.0f;
+};
+
+class FillMaxSizePolicy : public MeasurePolicy {
+    FillMaxSizeConfig config_;
+public:
+    explicit FillMaxSizePolicy(FillMaxSizeConfig config = {}) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// Sets fixed constraints in specified dimensions. -1 means "don't constrain".
+struct SizeConfig {
+    int width = -1;
+    int height = -1;
+};
+
+class SizePolicy : public MeasurePolicy {
+    SizeConfig config_;
+public:
+    explicit SizePolicy(SizeConfig config) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// Like SizePolicy but overrides parent constraints entirely.
+// The child is centered within the parent's allocated space if it differs.
+struct RequiredSizeConfig {
+    int width = -1;
+    int height = -1;
+};
+
+class RequiredSizePolicy : public MeasurePolicy {
+    RequiredSizeConfig config_;
+public:
+    explicit RequiredSizePolicy(RequiredSizeConfig config) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// Resets min constraints to 0 (loosens). If unbounded=true, also sets max to Infinity.
+struct WrapContentConfig {
+    bool unbounded = false;
+    Alignment horizontalAlignment = Alignment::Center;
+    Alignment verticalAlignment = Alignment::Center;
+};
+
+class WrapContentPolicy : public MeasurePolicy {
+    WrapContentConfig config_;
+public:
+    explicit WrapContentPolicy(WrapContentConfig config = {}) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// Sets a minimum only if the incoming constraints don't already specify one.
+struct DefaultMinSizeConfig {
+    int minWidth = 0;
+    int minHeight = 0;
+};
+
+class DefaultMinSizePolicy : public MeasurePolicy {
+    DefaultMinSizeConfig config_;
+public:
+    explicit DefaultMinSizePolicy(DefaultMinSizeConfig config) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// Clamps constraints to given ranges.
+struct SizeInConfig {
+    int minWidth = 0;
+    int maxWidth = Infinity;
+    int minHeight = 0;
+    int maxHeight = Infinity;
+};
+
+class SizeInPolicy : public MeasurePolicy {
+    SizeInConfig config_;
+public:
+    explicit SizeInPolicy(SizeInConfig config) : config_(config) {}
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// ============================================================================
 // Builder functions
 // ============================================================================
 
@@ -255,5 +342,17 @@ LayoutNode* Column(LayoutNodeVec children);
 LayoutNode* Box(LayoutNodeVec children);
 LayoutNode* FlowRow(LayoutNodeVec children);
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {});
+
+// Sizing modifier wrappers - each wraps a single child and transforms constraints.
+LayoutNode* FillMaxSize(LayoutNode* child, FillMaxSizeConfig config = {});
+LayoutNode* FillMaxWidth(LayoutNode* child, float fraction = 1.0f);
+LayoutNode* FillMaxHeight(LayoutNode* child, float fraction = 1.0f);
+LayoutNode* Size(LayoutNode* child, int width, int height);
+LayoutNode* Width(LayoutNode* child, int width);
+LayoutNode* Height(LayoutNode* child, int height);
+LayoutNode* RequiredSize(LayoutNode* child, int width, int height);
+LayoutNode* WrapContent(LayoutNode* child, WrapContentConfig config = {});
+LayoutNode* DefaultMinSize(LayoutNode* child, DefaultMinSizeConfig config);
+LayoutNode* SizeIn(LayoutNode* child, SizeInConfig config);
 
 } // namespace compose
