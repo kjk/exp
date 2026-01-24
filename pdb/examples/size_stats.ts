@@ -1,7 +1,7 @@
 /**
  * size_stats - Calculate size information for symbols in a PDB file.
  *
- * Usage: bun run examples/size_stats.ts <input.pdb>
+ * Usage: bun run examples/size_stats.ts [-just-rva] <input.pdb>
  *
  * Writes a CSV file (e.g. shell32_size_info.csv) with columns:
  *   module name, segment name, symbol kind, symbol name, rva, symbol size
@@ -75,7 +75,7 @@ function escapeCsv(s: string): string {
   return s;
 }
 
-function dumpSizeStats(filename: string): void {
+function dumpSizeStats(filename: string, justRva: boolean): void {
   const data = fs.readFileSync(filename);
   const pdb = PDB.open(new Uint8Array(data));
 
@@ -222,19 +222,31 @@ function dumpSizeStats(filename: string): void {
   const csvPath = path.join(process.cwd(), `${baseName}_size_info.csv`);
 
   const csvLines: string[] = [];
-  csvLines.push("rva,symbol size,symbol name,symbol kind,module name,segment name");
-  for (const e of entries) {
-    csvLines.push([
-      `0x${e.rva.toString(16)}`,
-      `0x${e.size.toString(16)}`,
-      escapeCsv(e.symbolName),
-      escapeCsv(e.symbolKind),
-      escapeCsv(e.moduleName),
-      escapeCsv(e.segmentName),
-    ].join(","));
+  if (justRva) {
+    csvLines.push("rva,symbol name");
+    for (const e of entries) {
+      csvLines.push([
+        `0x${e.rva.toString(16)}`,
+        escapeCsv(e.symbolName),
+      ].join(","));
+    }
+  } else {
+    csvLines.push("rva,symbol size,symbol name,symbol kind,module name,segment name");
+    for (const e of entries) {
+      csvLines.push([
+        `0x${e.rva.toString(16)}`,
+        `0x${e.size.toString(16)}`,
+        escapeCsv(e.symbolName),
+        escapeCsv(e.symbolKind),
+        escapeCsv(e.moduleName),
+        escapeCsv(e.segmentName),
+      ].join(","));
+    }
   }
   fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
   console.log(`Wrote ${entries.length} entries to ${csvPath}`);
+
+  if (justRva) return;
 
   // Print top 100 largest symbols (largest last)
   const sorted = [...entries].sort((a, b) => a.size - b.size);
@@ -281,14 +293,16 @@ function dumpSizeStats(filename: string): void {
 }
 
 // Main
-const filename = process.argv[2];
+const args = process.argv.slice(2);
+const justRva = args.includes("-just-rva");
+const filename = args.find(a => !a.startsWith("-"));
 if (!filename) {
-  console.error("Usage: bun run examples/size_stats.ts <input.pdb>");
+  console.error("Usage: bun run examples/size_stats.ts [-just-rva] <input.pdb>");
   process.exit(1);
 }
 
 try {
-  dumpSizeStats(filename);
+  dumpSizeStats(filename, justRva);
 } catch (e) {
   console.error(`error: ${e}`);
   process.exit(1);
