@@ -448,7 +448,9 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
 
     std::vector<Placeable> placeables;
     placeables.reserve(children.size());
-    Constraints childConstraints = constraints.loosen();
+    Constraints childConstraints = config_.propagateMinConstraints
+        ? constraints
+        : constraints.loosen();
 
     int maxWidth = 0;
     int maxHeight = 0;
