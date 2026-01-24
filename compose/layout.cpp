@@ -884,6 +884,136 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
 }
 
 // ============================================================================
+// LazyColumnPolicy
+// ============================================================================
+
+LazyColumnPolicy::LazyColumnPolicy(LayoutNodeProvider* provider, LazyColumnConfig config)
+    : config_(config), provider_(provider) {}
+
+LazyColumnPolicy::~LazyColumnPolicy() {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    delete provider_;
+}
+
+MeasureResult LazyColumnPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
+    // Free previously composed nodes from last measure pass.
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    composedNodes_.clear();
+
+    int totalCount = provider_->count();
+    if (totalCount == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int viewport = constraints.hasBoundedHeight() ? constraints.maxHeight : Infinity;
+    int y = -firstVisibleItemOffset_;
+    int maxWidth = 0;
+
+    // Phase 1: Measure visible items.
+    struct ItemInfo {
+        Placeable placeable;
+        int y;
+    };
+    std::vector<ItemInfo> items;
+
+    for (int i = firstVisibleIndex_; i < totalCount; i++) {
+        if (viewport != Infinity && y >= viewport) break;
+
+        LayoutNode* node = provider_->get(i);
+        composedNodes_.push_back(node);
+
+        Constraints childConstraints = {0, constraints.maxWidth, 0, constraints.maxHeight};
+        auto placeable = node->measure(childConstraints);
+
+        items.push_back({placeable, y});
+        maxWidth = std::max(maxWidth, placeable.width());
+        y += placeable.height() + config_.spacing;
+    }
+
+    int layoutWidth = constraints.constrainWidth(maxWidth);
+    int layoutHeight = constraints.hasBoundedHeight()
+        ? constraints.constrainHeight(viewport)
+        : constraints.constrainHeight(y > 0 ? y - config_.spacing : 0);
+
+    // Phase 2: Place items with cross-axis alignment.
+    for (auto& item : items) {
+        int crossOffset = align(config_.crossAxisAlignment, item.placeable.width(), layoutWidth);
+        item.placeable.placeAt(crossOffset, item.y);
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
+// LazyRowPolicy
+// ============================================================================
+
+LazyRowPolicy::LazyRowPolicy(LayoutNodeProvider* provider, LazyRowConfig config)
+    : config_(config), provider_(provider) {}
+
+LazyRowPolicy::~LazyRowPolicy() {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    delete provider_;
+}
+
+MeasureResult LazyRowPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
+    // Free previously composed nodes from last measure pass.
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    composedNodes_.clear();
+
+    int totalCount = provider_->count();
+    if (totalCount == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int viewport = constraints.hasBoundedWidth() ? constraints.maxWidth : Infinity;
+    int x = -firstVisibleItemOffset_;
+    int maxHeight = 0;
+
+    // Phase 1: Measure visible items.
+    struct ItemInfo {
+        Placeable placeable;
+        int x;
+    };
+    std::vector<ItemInfo> items;
+
+    for (int i = firstVisibleIndex_; i < totalCount; i++) {
+        if (viewport != Infinity && x >= viewport) break;
+
+        LayoutNode* node = provider_->get(i);
+        composedNodes_.push_back(node);
+
+        Constraints childConstraints = {0, constraints.maxWidth, 0, constraints.maxHeight};
+        auto placeable = node->measure(childConstraints);
+
+        items.push_back({placeable, x});
+        maxHeight = std::max(maxHeight, placeable.height());
+        x += placeable.width() + config_.spacing;
+    }
+
+    int layoutWidth = constraints.hasBoundedWidth()
+        ? constraints.constrainWidth(viewport)
+        : constraints.constrainWidth(x > 0 ? x - config_.spacing : 0);
+    int layoutHeight = constraints.constrainHeight(maxHeight);
+
+    // Phase 2: Place items with cross-axis alignment.
+    for (auto& item : items) {
+        int crossOffset = align(config_.crossAxisAlignment, item.placeable.height(), layoutHeight);
+        item.placeable.placeAt(item.x, crossOffset);
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
 // FillMaxSizePolicy
 // ============================================================================
 
@@ -1139,6 +1269,14 @@ LayoutNode* FlowColumn(FlowColumnConfig config, LayoutNodeVec children) {
 
 LayoutNode* FlowColumn(LayoutNodeVec children) {
     return FlowColumn({}, children);
+}
+
+LayoutNode* LazyColumn(LayoutNodeProvider* provider, LazyColumnConfig config) {
+    return new LayoutNode(new LazyColumnPolicy(provider, config));
+}
+
+LayoutNode* LazyRow(LayoutNodeProvider* provider, LazyRowConfig config) {
+    return new LayoutNode(new LazyRowPolicy(provider, config));
 }
 
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children) {
