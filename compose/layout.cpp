@@ -441,6 +441,153 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
 }
 
 // ============================================================================
+// FillMaxSizePolicy
+// ============================================================================
+
+MeasureResult FillMaxSizePolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints = constraints;
+    if (config_.widthFraction >= 0.0f && constraints.hasBoundedWidth()) {
+        int w = static_cast<int>(constraints.maxWidth * config_.widthFraction);
+        childConstraints.minWidth = w;
+        childConstraints.maxWidth = w;
+    }
+    if (config_.heightFraction >= 0.0f && constraints.hasBoundedHeight()) {
+        int h = static_cast<int>(constraints.maxHeight * config_.heightFraction);
+        childConstraints.minHeight = h;
+        childConstraints.maxHeight = h;
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        placeable.placeAt(0, 0);
+        return {placeable.width(), placeable.height()};
+    }
+    return {childConstraints.minWidth, childConstraints.minHeight};
+}
+
+// ============================================================================
+// SizePolicy
+// ============================================================================
+
+MeasureResult SizePolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints = constraints;
+    if (config_.width >= 0) {
+        int w = constraints.constrainWidth(config_.width);
+        childConstraints.minWidth = w;
+        childConstraints.maxWidth = w;
+    }
+    if (config_.height >= 0) {
+        int h = constraints.constrainHeight(config_.height);
+        childConstraints.minHeight = h;
+        childConstraints.maxHeight = h;
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        placeable.placeAt(0, 0);
+        return {placeable.width(), placeable.height()};
+    }
+    return {childConstraints.minWidth, childConstraints.minHeight};
+}
+
+// ============================================================================
+// RequiredSizePolicy
+// ============================================================================
+
+MeasureResult RequiredSizePolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints = constraints;
+    if (config_.width >= 0) {
+        childConstraints.minWidth = config_.width;
+        childConstraints.maxWidth = config_.width;
+    }
+    if (config_.height >= 0) {
+        childConstraints.minHeight = config_.height;
+        childConstraints.maxHeight = config_.height;
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        // Center the child within the parent's allocated space.
+        int parentW = constraints.constrainWidth(placeable.width());
+        int parentH = constraints.constrainHeight(placeable.height());
+        int x = (parentW - placeable.width()) / 2;
+        int y = (parentH - placeable.height()) / 2;
+        placeable.placeAt(x, y);
+        return {parentW, parentH};
+    }
+    int w = config_.width >= 0 ? constraints.constrainWidth(config_.width) : constraints.minWidth;
+    int h = config_.height >= 0 ? constraints.constrainHeight(config_.height) : constraints.minHeight;
+    return {w, h};
+}
+
+// ============================================================================
+// WrapContentPolicy
+// ============================================================================
+
+MeasureResult WrapContentPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints = constraints;
+    childConstraints.minWidth = 0;
+    childConstraints.minHeight = 0;
+    if (config_.unbounded) {
+        childConstraints.maxWidth = Infinity;
+        childConstraints.maxHeight = Infinity;
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        // If child is smaller than parent's min, align within the min-sized space.
+        int parentW = constraints.constrainWidth(placeable.width());
+        int parentH = constraints.constrainHeight(placeable.height());
+        int x = align(config_.horizontalAlignment, placeable.width(), parentW);
+        int y = align(config_.verticalAlignment, placeable.height(), parentH);
+        placeable.placeAt(x, y);
+        return {parentW, parentH};
+    }
+    return {constraints.minWidth, constraints.minHeight};
+}
+
+// ============================================================================
+// DefaultMinSizePolicy
+// ============================================================================
+
+MeasureResult DefaultMinSizePolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints = constraints;
+    if (childConstraints.minWidth == 0 && config_.minWidth > 0) {
+        childConstraints.minWidth = std::min(config_.minWidth, childConstraints.maxWidth);
+    }
+    if (childConstraints.minHeight == 0 && config_.minHeight > 0) {
+        childConstraints.minHeight = std::min(config_.minHeight, childConstraints.maxHeight);
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        placeable.placeAt(0, 0);
+        return {placeable.width(), placeable.height()};
+    }
+    return {childConstraints.minWidth, childConstraints.minHeight};
+}
+
+// ============================================================================
+// SizeInPolicy
+// ============================================================================
+
+MeasureResult SizeInPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
+    Constraints childConstraints;
+    childConstraints.minWidth = std::clamp(config_.minWidth, constraints.minWidth, constraints.maxWidth);
+    childConstraints.maxWidth = std::clamp(config_.maxWidth, constraints.minWidth, constraints.maxWidth);
+    childConstraints.minHeight = std::clamp(config_.minHeight, constraints.minHeight, constraints.maxHeight);
+    childConstraints.maxHeight = std::clamp(config_.maxHeight, constraints.minHeight, constraints.maxHeight);
+    // Ensure min <= max after clamping.
+    if (childConstraints.minWidth > childConstraints.maxWidth) {
+        childConstraints.minWidth = childConstraints.maxWidth;
+    }
+    if (childConstraints.minHeight > childConstraints.maxHeight) {
+        childConstraints.minHeight = childConstraints.maxHeight;
+    }
+    if (!children.empty()) {
+        auto placeable = children[0]->measure(childConstraints);
+        placeable.placeAt(0, 0);
+        return {placeable.width(), placeable.height()};
+    }
+    return {childConstraints.minWidth, childConstraints.minHeight};
+}
+
+// ============================================================================
 // Builder functions
 // ============================================================================
 
@@ -482,6 +629,46 @@ LayoutNode* FlowRow(LayoutNodeVec children) {
 
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children) {
     return new LayoutNode(policy, children);
+}
+
+LayoutNode* FillMaxSize(LayoutNode* child, FillMaxSizeConfig config) {
+    return new LayoutNode(new FillMaxSizePolicy(config), {child});
+}
+
+LayoutNode* FillMaxWidth(LayoutNode* child, float fraction) {
+    return FillMaxSize(child, {.widthFraction = fraction, .heightFraction = -1.0f});
+}
+
+LayoutNode* FillMaxHeight(LayoutNode* child, float fraction) {
+    return FillMaxSize(child, {.widthFraction = -1.0f, .heightFraction = fraction});
+}
+
+LayoutNode* Size(LayoutNode* child, int width, int height) {
+    return new LayoutNode(new SizePolicy({.width = width, .height = height}), {child});
+}
+
+LayoutNode* Width(LayoutNode* child, int width) {
+    return new LayoutNode(new SizePolicy({.width = width}), {child});
+}
+
+LayoutNode* Height(LayoutNode* child, int height) {
+    return new LayoutNode(new SizePolicy({.height = height}), {child});
+}
+
+LayoutNode* RequiredSize(LayoutNode* child, int width, int height) {
+    return new LayoutNode(new RequiredSizePolicy({.width = width, .height = height}), {child});
+}
+
+LayoutNode* WrapContent(LayoutNode* child, WrapContentConfig config) {
+    return new LayoutNode(new WrapContentPolicy(config), {child});
+}
+
+LayoutNode* DefaultMinSize(LayoutNode* child, DefaultMinSizeConfig config) {
+    return new LayoutNode(new DefaultMinSizePolicy(config), {child});
+}
+
+LayoutNode* SizeIn(LayoutNode* child, SizeInConfig config) {
+    return new LayoutNode(new SizeInPolicy(config), {child});
 }
 
 } // namespace compose
