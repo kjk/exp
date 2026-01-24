@@ -51,7 +51,7 @@ import {
   S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
   S_DEFRANGE_REGISTER_REL,
   S_CALLEES, S_CALLERS, S_INLINEES,
-  S_FRAMECOOKIE, S_FILESTATIC,
+  S_FRAMECOOKIE, S_FILESTATIC, S_HEAPALLOCSITE,
   type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType, type FrameCookieType,
 } from "./constants.js";
 import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
@@ -454,6 +454,13 @@ export interface CoffGroupSymbol {
   name: string;
 }
 
+export interface HeapAllocationSiteSymbol {
+  kind: "HeapAllocationSite";
+  offset: PdbInternalSectionOffset;
+  instructionLength: number;
+  type: TypeIndex;
+}
+
 export interface FileStaticSymbol {
   kind: "FileStatic";
   type: TypeIndex;
@@ -594,7 +601,8 @@ export type SymbolData =
   | FunctionListSymbol
   | InlineesSymbol
   | FrameCookieSymbol
-  | FileStaticSymbol;
+  | FileStaticSymbol
+  | HeapAllocationSiteSymbol;
 
 /** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
@@ -1034,6 +1042,13 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const offset = readSectionOffset(buf);
       const name = buf.readCString();
       return { kind: "CoffGroup", length, characteristics, offset, name };
+    }
+
+    case S_HEAPALLOCSITE: {
+      const offset = readSectionOffset(buf);
+      const instructionLength = buf.readU16();
+      const type: TypeIndex = buf.readU32();
+      return { kind: "HeapAllocationSite", offset, instructionLength, type };
     }
 
     case S_FILESTATIC: {

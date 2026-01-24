@@ -178,6 +178,7 @@ export type {
   InlineesSymbol,
   FileStaticSymbol,
   FrameCookieSymbol,
+  HeapAllocationSiteSymbol,
 } from "./symbol/index.js";
 export {
   CPUType,
