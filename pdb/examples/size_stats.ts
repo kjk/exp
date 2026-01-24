@@ -222,15 +222,15 @@ function dumpSizeStats(filename: string): void {
   const csvPath = path.join(process.cwd(), `${baseName}_size_info.csv`);
 
   const csvLines: string[] = [];
-  csvLines.push("module name,segment name,symbol kind,symbol name,rva,symbol size");
+  csvLines.push("rva,symbol size,symbol name,symbol kind,module name,segment name");
   for (const e of entries) {
     csvLines.push([
-      escapeCsv(e.moduleName),
-      escapeCsv(e.segmentName),
-      escapeCsv(e.symbolKind),
-      escapeCsv(e.symbolName),
       `0x${e.rva.toString(16)}`,
       `0x${e.size.toString(16)}`,
+      escapeCsv(e.symbolName),
+      escapeCsv(e.symbolKind),
+      escapeCsv(e.moduleName),
+      escapeCsv(e.segmentName),
     ].join(","));
   }
   fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
