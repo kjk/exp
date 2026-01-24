@@ -9,7 +9,7 @@
  * Also prints the 100 largest symbols to the console (smallest first).
  */
 
-import { PDB, type PdbInternalSectionOffset, type SymbolData } from "../src/index.js";
+import { PDB, type PdbInternalSectionOffset, type SymbolData, type RawSymbol } from "../src/index.js";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -34,7 +34,6 @@ function getSymbolOffset(sym: SymbolData): PdbInternalSectionOffset | null {
     case "ThreadStorage":
     case "Block":
     case "SeparatedCode":
-    case "CoffGroup":
     case "Label":
       return sym.offset;
     default:
@@ -50,8 +49,6 @@ function getSymbolSize(sym: SymbolData): number | null {
     case "Block":
     case "SeparatedCode":
       return sym.len;
-    case "CoffGroup":
-      return sym.length;
     default:
       return null;
   }
@@ -66,7 +63,6 @@ function getSymbolName(sym: SymbolData): string {
     case "Thunk":
     case "ThreadStorage":
     case "Block":
-    case "CoffGroup":
     case "Label":
       return sym.name ?? "";
     default:
@@ -101,7 +97,7 @@ function dumpSizeStats(filename: string): void {
   }
   const rawEntries: RawEntry[] = [];
 
-  function collectSymbols(moduleName: string, symbols: { kind: number; data: Uint8Array }[]): void {
+  function collectSymbols(moduleName: string, symbols: RawSymbol[]): void {
     for (const rawSym of symbols) {
       let sym: SymbolData;
       try {
