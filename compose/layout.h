@@ -267,10 +267,17 @@ public:
     int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
 };
 
+enum class FlowOverflow {
+    Visible,  // All items are laid out even beyond maxLines (no clipping)
+    Clip,     // Items beyond maxLines are not placed
+};
+
 struct FlowRowConfig {
     int mainAxisSpacing = 0;
     int crossAxisSpacing = 0;
     int maxItemsInEachRow = 0;  // 0 = unlimited
+    int maxLines = 0;           // 0 = unlimited
+    FlowOverflow overflow = FlowOverflow::Clip;
     Alignment crossAxisAlignment = Alignment::Start;
 };
 
@@ -285,6 +292,8 @@ struct FlowColumnConfig {
     int mainAxisSpacing = 0;
     int crossAxisSpacing = 0;
     int maxItemsInEachColumn = 0;  // 0 = unlimited
+    int maxColumns = 0;            // 0 = unlimited
+    FlowOverflow overflow = FlowOverflow::Clip;
     Alignment crossAxisAlignment = Alignment::Start;
 };
 
