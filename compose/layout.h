@@ -316,6 +316,82 @@ public:
 };
 
 // ============================================================================
+// LayoutNodeProvider (for lazy layouts)
+// ============================================================================
+
+// Interface for deferred node creation. LazyColumn/LazyRow use this to create
+// only the nodes that are visible in the viewport, avoiding measurement of
+// off-screen items. The provider acts as a factory: get() creates or returns
+// a cached node for the given index. Ownership of returned nodes transfers to
+// the lazy policy (they are freed on re-measure or policy destruction).
+class LayoutNodeProvider {
+public:
+    virtual ~LayoutNodeProvider() = default;
+    virtual int count() = 0;
+    virtual LayoutNode* get(int index) = 0;
+};
+
+// ============================================================================
+// LazyColumn / LazyRow policies
+// ============================================================================
+
+struct LazyColumnConfig {
+    int spacing = 0;
+    Alignment crossAxisAlignment = Alignment::Start;
+};
+
+class LazyColumnPolicy : public MeasurePolicy {
+    LazyColumnConfig config_;
+    LayoutNodeProvider* provider_;
+    int firstVisibleIndex_ = 0;
+    int firstVisibleItemOffset_ = 0;
+    std::vector<LayoutNode*> composedNodes_;
+
+public:
+    explicit LazyColumnPolicy(LayoutNodeProvider* provider, LazyColumnConfig config = {});
+    ~LazyColumnPolicy() override;
+
+    void scrollTo(int index, int offset = 0) {
+        firstVisibleIndex_ = index;
+        firstVisibleItemOffset_ = offset;
+    }
+    int firstVisibleIndex() const { return firstVisibleIndex_; }
+    int firstVisibleItemOffset() const { return firstVisibleItemOffset_; }
+    LayoutNodeProvider* provider() const { return provider_; }
+    const std::vector<LayoutNode*>& composedNodes() const { return composedNodes_; }
+
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+struct LazyRowConfig {
+    int spacing = 0;
+    Alignment crossAxisAlignment = Alignment::Start;
+};
+
+class LazyRowPolicy : public MeasurePolicy {
+    LazyRowConfig config_;
+    LayoutNodeProvider* provider_;
+    int firstVisibleIndex_ = 0;
+    int firstVisibleItemOffset_ = 0;
+    std::vector<LayoutNode*> composedNodes_;
+
+public:
+    explicit LazyRowPolicy(LayoutNodeProvider* provider, LazyRowConfig config = {});
+    ~LazyRowPolicy() override;
+
+    void scrollTo(int index, int offset = 0) {
+        firstVisibleIndex_ = index;
+        firstVisibleItemOffset_ = offset;
+    }
+    int firstVisibleIndex() const { return firstVisibleIndex_; }
+    int firstVisibleItemOffset() const { return firstVisibleItemOffset_; }
+    LayoutNodeProvider* provider() const { return provider_; }
+    const std::vector<LayoutNode*>& composedNodes() const { return composedNodes_; }
+
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// ============================================================================
 // Sizing modifier policies (constraint transformers)
 // ============================================================================
 
@@ -432,6 +508,8 @@ LayoutNode* Box(LayoutNodeVec children);
 LayoutNode* FlowRow(LayoutNodeVec children);
 LayoutNode* FlowColumn(FlowColumnConfig config, LayoutNodeVec children);
 LayoutNode* FlowColumn(LayoutNodeVec children);
+LayoutNode* LazyColumn(LayoutNodeProvider* provider, LazyColumnConfig config = {});
+LayoutNode* LazyRow(LayoutNodeProvider* provider, LazyRowConfig config = {});
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {});
 
 // Sizing modifier wrappers - each wraps a single child and transforms constraints.
