@@ -174,6 +174,7 @@ export type {
   DefRangeSubfieldRegisterSymbol,
   DefRangeFramePointerRelFullScopeSymbol,
   DefRangeRegisterRelSymbol,
+  FunctionListSymbol,
 } from "./symbol/index.js";
 export {
   CPUType,

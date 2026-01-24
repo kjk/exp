@@ -50,6 +50,7 @@ import {
   S_DEFRANGE_SUBFIELD_REGISTER,
   S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
   S_DEFRANGE_REGISTER_REL,
+  S_CALLEES, S_CALLERS,
   type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType,
 } from "./constants.js";
 import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
@@ -521,6 +522,13 @@ export interface DefRangeRegisterRelSymbol {
   gaps: LocalAddressGap[];
 }
 
+/** List of called or calling functions (S_CALLEES / S_CALLERS). */
+export interface FunctionListSymbol {
+  kind: "Callees" | "Callers";
+  functions: TypeIndex[];
+  invocations: number[] | null;
+}
+
 export type SymbolData =
   | ObjNameSymbol
   | RegisterVariableSymbol
@@ -559,7 +567,8 @@ export type SymbolData =
   | DefRangeFramePointerRelSymbol
   | DefRangeSubfieldRegisterSymbol
   | DefRangeFramePointerRelFullScopeSymbol
-  | DefRangeRegisterRelSymbol;
+  | DefRangeRegisterRelSymbol
+  | FunctionListSymbol;
 
 /** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
@@ -1072,6 +1081,27 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
         basePointerOffset,
         range,
         gaps,
+      };
+    }
+
+    case S_CALLEES:
+    case S_CALLERS: {
+      const count = buf.readU32();
+      const functions: TypeIndex[] = [];
+      for (let i = 0; i < count; i++) {
+        functions.push(buf.readU32());
+      }
+      let invocations: number[] | null = null;
+      if (buf.remaining >= count * 4) {
+        invocations = [];
+        for (let i = 0; i < count; i++) {
+          invocations.push(buf.readU32());
+        }
+      }
+      return {
+        kind: kind === S_CALLEES ? "Callees" : "Callers",
+        functions,
+        invocations,
       };
     }
 
