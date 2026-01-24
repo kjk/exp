@@ -50,6 +50,8 @@ import {
   S_DEFRANGE_SUBFIELD_REGISTER,
   S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
   S_DEFRANGE_REGISTER_REL,
+  S_TOKENREF, S_GMANPROC, S_LMANPROC,
+  S_MANSLOT, S_MANSLOT_ST, S_OEM,
   S_CALLEES, S_CALLERS, S_INLINEES,
   S_FRAMECOOKIE, S_FILESTATIC, S_HEAPALLOCSITE,
   type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType, type FrameCookieType,
@@ -559,6 +561,45 @@ export interface InlineesSymbol {
   inlinees: IdIndex[];
 }
 
+export interface TokenReferenceSymbol {
+  kind: "TokenReference";
+  sumName: number;
+  symbolIndex: SymbolIndex;
+  module: number | null;
+  name: string;
+}
+
+export interface ManagedProcedureSymbol {
+  kind: "ManagedProcedure";
+  global: boolean;
+  parent: SymbolIndex | null;
+  end: SymbolIndex;
+  next: SymbolIndex | null;
+  len: number;
+  dbgStart: number;
+  dbgEnd: number;
+  token: number;
+  offset: PdbInternalSectionOffset;
+  flags: ProcedureFlags;
+  name: string | null;
+}
+
+export interface ManagedSlotSymbol {
+  kind: "ManagedSlot";
+  slot: number;
+  type: TypeIndex;
+  offset: PdbInternalSectionOffset;
+  flags: LocalVariableFlags;
+  name: string;
+}
+
+export interface OemSymbol {
+  kind: "OEM";
+  idOem: Uint8Array;
+  type: TypeIndex;
+  userData: Uint8Array;
+}
+
 export type SymbolData =
   | ObjNameSymbol
   | RegisterVariableSymbol
@@ -568,14 +609,18 @@ export type SymbolData =
   | DataSymbol
   | PublicSymbol
   | ProcedureSymbol
+  | ManagedProcedureSymbol
   | ThreadStorageSymbol
   | UsingNamespaceSymbol
   | ProcedureReferenceSymbol
   | DataReferenceSymbol
   | AnnotationReferenceSymbol
+  | TokenReferenceSymbol
   | TrampolineSymbol
   | ExportSymbol
   | LocalSymbol
+  | ManagedSlotSymbol
+  | OemSymbol
   | BuildInfoSymbol
   | InlineSiteSymbol
   | BlockSymbol
@@ -783,6 +828,36 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       };
     }
 
+    case S_LMANPROC:
+    case S_GMANPROC: {
+      const global = kind === S_GMANPROC;
+      const parent = readOptionalSymbolIndex(buf);
+      const end: SymbolIndex = buf.readU32();
+      const next = readOptionalSymbolIndex(buf);
+      const len = buf.readU32();
+      const dbgStart = buf.readU32();
+      const dbgEnd = buf.readU32();
+      const token = buf.readU32();
+      const offset = readSectionOffset(buf);
+      const flags = parseProcedureFlags(buf.readU8());
+      buf.readU16(); // return register (reserved)
+      const name = parseOptionalName(buf, kind);
+      return {
+        kind: "ManagedProcedure",
+        global,
+        parent,
+        end,
+        next,
+        len,
+        dbgStart,
+        dbgEnd,
+        token,
+        offset,
+        flags,
+        name,
+      };
+    }
+
     case S_THUNK32_ST:
     case S_THUNK32: {
       const parent = readOptionalSymbolIndex(buf);
@@ -871,6 +946,15 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       return { kind: "AnnotationReference", sumName, symbolIndex, module, name };
     }
 
+    case S_TOKENREF: {
+      const sumName = buf.readU32();
+      const symbolIndex: SymbolIndex = buf.readU32();
+      const rawModule = buf.readU16();
+      const module = rawModule === 0 ? null : rawModule - 1;
+      const name = buf.readCString();
+      return { kind: "TokenReference", sumName, symbolIndex, module, name };
+    }
+
     case S_TRAMPOLINE: {
       const trampolineType = buf.readU16() as TrampolineType;
       const thunkSize = buf.readU16();
@@ -899,6 +983,16 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const flags = parseLocalVariableFlags(buf.readU16());
       const name = buf.readCString();
       return { kind: "Local", type, flags, name };
+    }
+
+    case S_MANSLOT_ST:
+    case S_MANSLOT: {
+      const slot = buf.readU32();
+      const type: TypeIndex = buf.readU32();
+      const offset = readSectionOffset(buf);
+      const flags = parseLocalVariableFlags(buf.readU16());
+      const name = parseSymbolName(buf, kind);
+      return { kind: "ManagedSlot", slot, type, offset, flags, name };
     }
 
     case S_BUILDINFO: {
@@ -1042,6 +1136,13 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const offset = readSectionOffset(buf);
       const name = buf.readCString();
       return { kind: "CoffGroup", length, characteristics, offset, name };
+    }
+
+    case S_OEM: {
+      const idOem = buf.take(16);
+      const type: TypeIndex = buf.readU32();
+      const userData = buf.remainingBytes.slice();
+      return { kind: "OEM", idOem, type, userData };
     }
 
     case S_HEAPALLOCSITE: {
@@ -1236,6 +1337,8 @@ export function symbolStartsScope(kind: number): boolean {
     case S_LPROC32_DPC_ID:
     case S_GPROC32_ST:
     case S_LPROC32_ST:
+    case S_GMANPROC:
+    case S_LMANPROC:
     case S_THUNK32:
     case S_THUNK32_ST:
     case S_BLOCK32:
