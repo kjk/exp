@@ -1,0 +1,3 @@
+look at https://github.com/getsentry/pdb/pull/147 which a PR to the original rust library
+port it to typescript
+---
