@@ -411,7 +411,8 @@ function parseFieldRecord(buf: ParseBuffer, kind: number): TypeData | null {
       return { kind: "NestedType", attributes, nestedType, name };
     }
 
-    case C.LF_NESTTYPEEX: {
+    case C.LF_NESTTYPEEX:
+    case C.LF_NESTTYPEEX_ST: {
       const attributes = parseFieldAttributes(buf.readU16());
       const nestedType: TypeIndex = buf.readU32();
       const name = readTypeName(buf, kind);
@@ -474,10 +475,11 @@ function parseFieldRecord(buf: ParseBuffer, kind: number): TypeData | null {
       return { kind: "Method", attributes, methodType, vtableOffset, name };
     }
 
-    case C.LF_ENUMERATE: {
+    case C.LF_ENUMERATE:
+    case C.LF_ENUMERATE_ST: {
       const attributes = parseFieldAttributes(buf.readU16());
       const value = buf.readVariant();
-      const name = buf.readCString();
+      const name = readTypeName(buf, kind);
       return { kind: "Enumerate", attributes, value, name };
     }
 
