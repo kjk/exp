@@ -1014,6 +1014,211 @@ MeasureResult LazyRowPolicy::Measure(LayoutNodeVec /*children*/, Constraints con
 }
 
 // ============================================================================
+// computeCellSizes
+// ============================================================================
+
+std::vector<int> computeCellSizes(GridCells cells, int availableSize, int spacing) {
+    switch (cells.type) {
+    case GridCells::Type::Fixed: {
+        int n = std::max(1, cells.value);
+        int totalSpacing = spacing * (n - 1);
+        int cellSize = std::max(0, (availableSize - totalSpacing) / n);
+        return std::vector<int>(n, cellSize);
+    }
+    case GridCells::Type::Adaptive: {
+        int minSize = std::max(1, cells.value);
+        // How many cells can fit? Each cell needs at least minSize, plus spacing between.
+        int n = 1;
+        while ((n + 1) * minSize + spacing * n <= availableSize) {
+            n++;
+        }
+        int totalSpacing = spacing * (n - 1);
+        int cellSize = std::max(0, (availableSize - totalSpacing) / n);
+        return std::vector<int>(n, cellSize);
+    }
+    case GridCells::Type::FixedSize: {
+        int size = std::max(1, cells.value);
+        int n = 1;
+        while ((n + 1) * size + spacing * n <= availableSize) {
+            n++;
+        }
+        return std::vector<int>(n, size);
+    }
+    }
+    return {availableSize};
+}
+
+// ============================================================================
+// LazyVerticalGridPolicy
+// ============================================================================
+
+LazyVerticalGridPolicy::LazyVerticalGridPolicy(LayoutNodeProvider* provider, LazyVerticalGridConfig config)
+    : config_(config), provider_(provider) {}
+
+LazyVerticalGridPolicy::~LazyVerticalGridPolicy() {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    delete provider_;
+}
+
+MeasureResult LazyVerticalGridPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    composedNodes_.clear();
+
+    int totalCount = provider_->count();
+    if (totalCount == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int availableWidth = constraints.hasBoundedWidth() ? constraints.maxWidth : 0;
+    auto colWidths = computeCellSizes(config_.columns, availableWidth, config_.crossAxisSpacing);
+    int numCols = static_cast<int>(colWidths.size());
+
+    // Compute column x-offsets.
+    std::vector<int> colX(numCols);
+    int xPos = 0;
+    for (int c = 0; c < numCols; c++) {
+        colX[c] = xPos;
+        xPos += colWidths[c] + config_.crossAxisSpacing;
+    }
+    int layoutWidth = constraints.constrainWidth(
+        xPos > 0 ? xPos - config_.crossAxisSpacing : 0);
+
+    int viewport = constraints.hasBoundedHeight() ? constraints.maxHeight : Infinity;
+
+    // firstVisibleIndex_ is a row index (row = numCols items).
+    int firstItemIndex = firstVisibleIndex_ * numCols;
+    int y = -firstVisibleItemOffset_;
+
+    struct ItemPlacement {
+        Placeable placeable;
+        int x, y;
+    };
+    std::vector<ItemPlacement> placements;
+
+    for (int itemIdx = firstItemIndex; itemIdx < totalCount;) {
+        if (viewport != Infinity && y >= viewport) break;
+
+        // Measure one row.
+        int rowHeight = 0;
+        int rowStart = itemIdx;
+        int rowCount = std::min(numCols, totalCount - itemIdx);
+
+        for (int c = 0; c < rowCount; c++) {
+            LayoutNode* node = provider_->get(itemIdx + c);
+            composedNodes_.push_back(node);
+
+            Constraints cellConstraints = {colWidths[c], colWidths[c], 0, constraints.maxHeight};
+            auto placeable = node->measure(cellConstraints);
+            rowHeight = std::max(rowHeight, placeable.height());
+            placements.push_back({placeable, colX[c], y});
+        }
+
+        // Update y positions for items in this row (all share same y, height = rowHeight).
+        y += rowHeight + config_.mainAxisSpacing;
+        itemIdx += rowCount;
+    }
+
+    int layoutHeight = constraints.hasBoundedHeight()
+        ? constraints.constrainHeight(viewport)
+        : constraints.constrainHeight(y > 0 ? y - config_.mainAxisSpacing : 0);
+
+    // Place all items.
+    for (auto& p : placements) {
+        p.placeable.placeAt(p.x, p.y);
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
+// LazyHorizontalGridPolicy
+// ============================================================================
+
+LazyHorizontalGridPolicy::LazyHorizontalGridPolicy(LayoutNodeProvider* provider, LazyHorizontalGridConfig config)
+    : config_(config), provider_(provider) {}
+
+LazyHorizontalGridPolicy::~LazyHorizontalGridPolicy() {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    delete provider_;
+}
+
+MeasureResult LazyHorizontalGridPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
+    for (auto* node : composedNodes_) {
+        freeTree(node);
+    }
+    composedNodes_.clear();
+
+    int totalCount = provider_->count();
+    if (totalCount == 0) {
+        return {constraints.minWidth, constraints.minHeight};
+    }
+
+    int availableHeight = constraints.hasBoundedHeight() ? constraints.maxHeight : 0;
+    auto rowHeights = computeCellSizes(config_.rows, availableHeight, config_.crossAxisSpacing);
+    int numRows = static_cast<int>(rowHeights.size());
+
+    // Compute row y-offsets.
+    std::vector<int> rowY(numRows);
+    int yPos = 0;
+    for (int r = 0; r < numRows; r++) {
+        rowY[r] = yPos;
+        yPos += rowHeights[r] + config_.crossAxisSpacing;
+    }
+    int layoutHeight = constraints.constrainHeight(
+        yPos > 0 ? yPos - config_.crossAxisSpacing : 0);
+
+    int viewport = constraints.hasBoundedWidth() ? constraints.maxWidth : Infinity;
+
+    // firstVisibleIndex_ is a column index (column = numRows items).
+    int firstItemIndex = firstVisibleIndex_ * numRows;
+    int x = -firstVisibleItemOffset_;
+
+    struct ItemPlacement {
+        Placeable placeable;
+        int x, y;
+    };
+    std::vector<ItemPlacement> placements;
+
+    for (int itemIdx = firstItemIndex; itemIdx < totalCount;) {
+        if (viewport != Infinity && x >= viewport) break;
+
+        // Measure one column.
+        int colWidth = 0;
+        int colCount = std::min(numRows, totalCount - itemIdx);
+
+        for (int r = 0; r < colCount; r++) {
+            LayoutNode* node = provider_->get(itemIdx + r);
+            composedNodes_.push_back(node);
+
+            Constraints cellConstraints = {0, constraints.maxWidth, rowHeights[r], rowHeights[r]};
+            auto placeable = node->measure(cellConstraints);
+            colWidth = std::max(colWidth, placeable.width());
+            placements.push_back({placeable, x, rowY[r]});
+        }
+
+        x += colWidth + config_.mainAxisSpacing;
+        itemIdx += colCount;
+    }
+
+    int layoutWidth = constraints.hasBoundedWidth()
+        ? constraints.constrainWidth(viewport)
+        : constraints.constrainWidth(x > 0 ? x - config_.mainAxisSpacing : 0);
+
+    // Place all items.
+    for (auto& p : placements) {
+        p.placeable.placeAt(p.x, p.y);
+    }
+
+    return {layoutWidth, layoutHeight};
+}
+
+// ============================================================================
 // FillMaxSizePolicy
 // ============================================================================
 
@@ -1277,6 +1482,14 @@ LayoutNode* LazyColumn(LayoutNodeProvider* provider, LazyColumnConfig config) {
 
 LayoutNode* LazyRow(LayoutNodeProvider* provider, LazyRowConfig config) {
     return new LayoutNode(new LazyRowPolicy(provider, config));
+}
+
+LayoutNode* LazyVerticalGrid(LayoutNodeProvider* provider, LazyVerticalGridConfig config) {
+    return new LayoutNode(new LazyVerticalGridPolicy(provider, config));
+}
+
+LayoutNode* LazyHorizontalGrid(LayoutNodeProvider* provider, LazyHorizontalGridConfig config) {
+    return new LayoutNode(new LazyHorizontalGridPolicy(provider, config));
 }
 
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children) {
