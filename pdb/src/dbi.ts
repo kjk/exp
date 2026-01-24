@@ -83,6 +83,8 @@ export interface DebugInformation {
   modules: DbiModule[];
   machineType: MachineType;
   age: number | null;
+  /** Whether this PDB has been stripped (no type info, line info, or per-object CV symbols). */
+  isStripped: boolean;
   extraStreams: DbiExtraStreams;
   sectionContributions: DbiSectionContribution[];
 }
@@ -212,6 +214,7 @@ export function parseDebugInformation(stream: MsfStream): DebugInformation {
     modules,
     machineType,
     age,
+    isStripped: (header.flags & 0x2) !== 0,
     extraStreams,
     sectionContributions,
   };
