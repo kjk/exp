@@ -257,6 +257,13 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
 // BoxPolicy
 // ============================================================================
 
+// BoxPolicy stacks all children on top of each other (like FrameLayout in Android).
+// 1. Measures each child with loosened constraints (no minimum, preserves max bounds),
+//    so children are free to be any size up to the parent's max.
+// 2. The box's own size is the max width and height across all children,
+//    clamped to the incoming constraints.
+// 3. Each child is aligned within the box according to horizontalAlignment
+//    and verticalAlignment (Start, Center, or End on each axis).
 MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
     if (children.empty()) {
         return {constraints.minWidth, constraints.minHeight};
