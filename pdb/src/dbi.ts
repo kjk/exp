@@ -77,6 +77,31 @@ export interface DbiExtraStreams {
   originalSectionHeaders: StreamIndex;
 }
 
+/**
+ * An entry in the DBI section map (also known as OMF Segment Map).
+ * See https://github.com/google/syzygy/blob/8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5/syzygy/pdb/pdb_data.h#L172
+ */
+export interface DbiSectionMapItem {
+  /** Flags: 0x1 read, 0x2 write, 0x4 execute, 0x8 32-bit. */
+  flags: number;
+  /** Section type: 0x1 = SEL, 0x2 = ABS, 0x10 = GROUP. */
+  sectionType: number;
+  /** Overlay number. */
+  overlay: number;
+  /** Group index, 0 if not relevant. */
+  group: number;
+  /** Section number (frame in OMF terminology). */
+  sectionNumber: number;
+  /** Index into name table, or 0xffff. */
+  segNameIndex: number;
+  /** Index into name table, or 0xffff. */
+  classNameIndex: number;
+  /** RVA offset of this section. */
+  rvaOffset: number;
+  /** Length of this section. */
+  sectionLength: number;
+}
+
 /** Parsed debug information from the DBI stream. */
 export interface DebugInformation {
   header: DbiHeader;
@@ -87,6 +112,8 @@ export interface DebugInformation {
   isStripped: boolean;
   extraStreams: DbiExtraStreams;
   sectionContributions: DbiSectionContribution[];
+  /** Section map entries (OMF Segment Map). */
+  sectionMap: DbiSectionMapItem[];
 }
 
 /** Parse a section contribution record. */
@@ -191,6 +218,11 @@ export function parseDebugInformation(stream: MsfStream): DebugInformation {
     }
   }
 
+  // Parse section map
+  const sectionMapStart = modulesEnd + header.sectionContributionSize;
+  buf.seek(sectionMapStart);
+  const sectionMap = parseSectionMap(buf, header.sectionMapSize);
+
   // Skip to debug header
   const debugHeaderOffset =
     headerLen +
@@ -217,6 +249,7 @@ export function parseDebugInformation(stream: MsfStream): DebugInformation {
     isStripped: (header.flags & 0x2) !== 0,
     extraStreams,
     sectionContributions,
+    sectionMap,
   };
 }
 
@@ -252,4 +285,37 @@ function parseExtraStreams(buf: ParseBuffer, size: number): DbiExtraStreams {
   }
 
   return result;
+}
+
+/** Parse the DBI section map (OMF Segment Map). */
+function parseSectionMap(buf: ParseBuffer, size: number): DbiSectionMapItem[] {
+  if (size === 0) return [];
+
+  const end = buf.pos + size;
+
+  // Section map header: sec_count (u16) + sec_count_log (u16)
+  const secCount = buf.readU16();
+  const _secCountLog = buf.readU16();
+
+  const items: DbiSectionMapItem[] = [];
+  while (buf.pos < end && items.length < secCount) {
+    items.push({
+      flags: buf.readU8(),
+      sectionType: buf.readU8(),
+      overlay: buf.readU16(),
+      group: buf.readU16(),
+      sectionNumber: buf.readU16(),
+      segNameIndex: buf.readU16(),
+      classNameIndex: buf.readU16(),
+      rvaOffset: buf.readU32(),
+      sectionLength: buf.readU32(),
+    });
+  }
+
+  // Skip remaining bytes
+  if (buf.pos < end) {
+    buf.take(end - buf.pos);
+  }
+
+  return items;
 }

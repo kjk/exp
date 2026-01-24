@@ -49,6 +49,7 @@ export type {
   DbiHeader,
   DbiModule,
   DbiSectionContribution,
+  DbiSectionMapItem,
   DbiExtraStreams,
   DebugInformation,
 } from "./dbi.js";
@@ -363,9 +364,66 @@ export class PDB {
     if (!this._sectionHeaders) {
       const extra = this.extraStreams;
       const stream = this.getOptionalStream(extra.sectionHeaders);
-      this._sectionHeaders = stream ? parseSectionHeaders(stream) : [];
+      this._sectionHeaders = stream
+        ? parseSectionHeaders(stream)
+        : this.synthesizeSections();
     }
     return this._sectionHeaders;
+  }
+
+  /**
+   * Synthesize section headers from the DBI section map when no explicit
+   * section header stream exists. This handles NGEN-generated PDB files
+   * (.ni.pdb from Crossgen2).
+   */
+  private synthesizeSections(): ImageSectionHeader[] {
+    // If we have OMAP From data, the RVAs won't map correctly.
+    const extra = this.extraStreams;
+    const omapFromSrcStream = this.getOptionalStream(extra.omapFromSrc);
+    if (omapFromSrcStream) return [];
+
+    const dbi = this.debugInformation;
+    const sectionMap = dbi.sectionMap;
+    if (sectionMap.length === 0) return [];
+
+    let rva = 0x1000; // in the absence of explicit section data, this starts at 0x1000
+    const sections: ImageSectionHeader[] = [];
+
+    for (const sm of sectionMap) {
+      // Filter: only SEL sections (sectionType == 1), skip ABS/GROUP.
+      // Also skip sections with bogus length.
+      if (sm.sectionType !== 1 || sm.sectionLength === 0xffffffff) continue;
+
+      let characteristics = 0;
+      if (sm.flags & 0x1) { // R
+        characteristics |= 0x40000000; // IMAGE_SCN_MEM_READ
+      }
+      if (sm.flags & 0x2) { // W
+        characteristics |= 0x80000000; // IMAGE_SCN_MEM_WRITE
+      }
+      if (sm.flags & 0x4) { // X
+        characteristics |= 0x20000000; // IMAGE_SCN_MEM_EXECUTE
+        characteristics |= 0x20; // IMAGE_SCN_CNT_CODE
+      }
+
+      const thisRva = rva + sm.rvaOffset;
+      rva = thisRva + sm.sectionLength;
+
+      sections.push({
+        name: "",
+        virtualSize: sm.sectionLength,
+        virtualAddress: thisRva,
+        sizeOfRawData: sm.sectionLength,
+        pointerToRawData: 0,
+        pointerToRelocations: 0,
+        pointerToLinenumbers: 0,
+        numberOfRelocations: 0,
+        numberOfLinenumbers: 0,
+        characteristics,
+      });
+    }
+
+    return sections;
   }
 
   // ─── String Table ───
