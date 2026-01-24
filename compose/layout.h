@@ -392,6 +392,89 @@ public:
 };
 
 // ============================================================================
+// GridCells strategy
+// ============================================================================
+
+// Determines how columns (or rows) are sized in a lazy grid.
+// Fixed(n): exactly n columns of equal width.
+// Adaptive(minSize): as many columns as fit, each at least minSize pixels.
+// FixedSize(size): columns of exact pixel size, as many as fit.
+struct GridCells {
+    enum class Type { Fixed, Adaptive, FixedSize };
+    Type type = Type::Fixed;
+    int value = 1;
+
+    static constexpr GridCells Fixed(int count) { return {Type::Fixed, count}; }
+    static constexpr GridCells Adaptive(int minSize) { return {Type::Adaptive, minSize}; }
+    static constexpr GridCells FixedSize(int size) { return {Type::FixedSize, size}; }
+};
+
+// Computes column/row sizes from a GridCells strategy and available space.
+std::vector<int> computeCellSizes(GridCells cells, int availableSize, int spacing);
+
+// ============================================================================
+// LazyVerticalGrid / LazyHorizontalGrid policies
+// ============================================================================
+
+struct LazyVerticalGridConfig {
+    GridCells columns = GridCells::Fixed(1);
+    int mainAxisSpacing = 0;   // vertical spacing between rows
+    int crossAxisSpacing = 0;  // horizontal spacing between columns
+};
+
+class LazyVerticalGridPolicy : public MeasurePolicy {
+    LazyVerticalGridConfig config_;
+    LayoutNodeProvider* provider_;
+    int firstVisibleIndex_ = 0;
+    int firstVisibleItemOffset_ = 0;
+    std::vector<LayoutNode*> composedNodes_;
+
+public:
+    explicit LazyVerticalGridPolicy(LayoutNodeProvider* provider, LazyVerticalGridConfig config = {});
+    ~LazyVerticalGridPolicy() override;
+
+    void scrollTo(int index, int offset = 0) {
+        firstVisibleIndex_ = index;
+        firstVisibleItemOffset_ = offset;
+    }
+    int firstVisibleIndex() const { return firstVisibleIndex_; }
+    int firstVisibleItemOffset() const { return firstVisibleItemOffset_; }
+    LayoutNodeProvider* provider() const { return provider_; }
+    const std::vector<LayoutNode*>& composedNodes() const { return composedNodes_; }
+
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+struct LazyHorizontalGridConfig {
+    GridCells rows = GridCells::Fixed(1);
+    int mainAxisSpacing = 0;   // horizontal spacing between columns
+    int crossAxisSpacing = 0;  // vertical spacing between rows
+};
+
+class LazyHorizontalGridPolicy : public MeasurePolicy {
+    LazyHorizontalGridConfig config_;
+    LayoutNodeProvider* provider_;
+    int firstVisibleIndex_ = 0;
+    int firstVisibleItemOffset_ = 0;
+    std::vector<LayoutNode*> composedNodes_;
+
+public:
+    explicit LazyHorizontalGridPolicy(LayoutNodeProvider* provider, LazyHorizontalGridConfig config = {});
+    ~LazyHorizontalGridPolicy() override;
+
+    void scrollTo(int index, int offset = 0) {
+        firstVisibleIndex_ = index;
+        firstVisibleItemOffset_ = offset;
+    }
+    int firstVisibleIndex() const { return firstVisibleIndex_; }
+    int firstVisibleItemOffset() const { return firstVisibleItemOffset_; }
+    LayoutNodeProvider* provider() const { return provider_; }
+    const std::vector<LayoutNode*>& composedNodes() const { return composedNodes_; }
+
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+};
+
+// ============================================================================
 // Sizing modifier policies (constraint transformers)
 // ============================================================================
 
@@ -510,6 +593,8 @@ LayoutNode* FlowColumn(FlowColumnConfig config, LayoutNodeVec children);
 LayoutNode* FlowColumn(LayoutNodeVec children);
 LayoutNode* LazyColumn(LayoutNodeProvider* provider, LazyColumnConfig config = {});
 LayoutNode* LazyRow(LayoutNodeProvider* provider, LazyRowConfig config = {});
+LayoutNode* LazyVerticalGrid(LayoutNodeProvider* provider, LazyVerticalGridConfig config = {});
+LayoutNode* LazyHorizontalGrid(LayoutNodeProvider* provider, LazyHorizontalGridConfig config = {});
 LayoutNode* Layout(MeasurePolicy* policy, LayoutNodeVec children = {});
 
 // Sizing modifier wrappers - each wraps a single child and transforms constraints.
