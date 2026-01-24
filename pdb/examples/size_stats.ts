@@ -242,8 +242,12 @@ function dumpSizeStats(filename: string): void {
 
   console.log(`\nTop ${top100.length} largest symbols (largest last):`);
   console.log("---");
+  const maxSizeWidth = top100.length > 0
+    ? top100[top100.length - 1].size.toString().length
+    : 0;
   for (const e of top100) {
-    console.log(`${e.symbolName}  [${e.symbolKind}]  ${e.size} bytes`);
+    const sizeStr = e.size.toString().padStart(maxSizeWidth);
+    console.log(`${sizeStr}  ${e.symbolName}  [${e.symbolKind}]`);
   }
 }
 
