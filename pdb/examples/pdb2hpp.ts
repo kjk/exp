@@ -14,6 +14,7 @@
 import {
   PDB,
   type TypeData,
+  type IdData,
   type TypeIndex,
   type RawItem,
   type FieldAttributes,
@@ -25,6 +26,12 @@ import {
 } from "../src/index.js";
 
 type TypeSet = Set<TypeIndex>;
+
+interface SourceInfo {
+  sourceFile: string;
+  moduleName: string;
+  line: number;
+}
 
 /** Resolve a type index to a human-readable C++ type name. */
 function typeName(
@@ -110,6 +117,7 @@ interface Method {
 interface ClassDef {
   classKind: "class" | "struct" | "interface";
   name: string;
+  sourceInfo?: SourceInfo;
   baseClasses: BaseClass[];
   fields: Field[];
   instanceMethods: Method[];
@@ -123,6 +131,7 @@ interface EnumValue {
 
 interface EnumDef {
   name: string;
+  sourceInfo?: SourceInfo;
   underlyingTypeName: string;
   values: EnumValue[];
 }
@@ -345,6 +354,7 @@ function addType(
   pdb: PDB,
   typeIndex: TypeIndex,
   neededTypes: TypeSet,
+  sourceMap?: Map<TypeIndex, SourceInfo>,
 ): void {
   const item = finder.find(typeIndex);
   if (!item) return;
@@ -372,6 +382,7 @@ function addType(
       const classDef: ClassDef = {
         classKind,
         name: data.name,
+        sourceInfo: sourceMap?.get(typeIndex),
         baseClasses: [],
         fields: [],
         instanceMethods: [],
@@ -389,6 +400,7 @@ function addType(
     case "Enumeration": {
       const enumDef: EnumDef = {
         name: data.name,
+        sourceInfo: sourceMap?.get(typeIndex),
         underlyingTypeName: typeName(finder, pdb, data.underlyingType, neededTypes),
         values: [],
       };
@@ -439,6 +451,9 @@ function formatOutput(output: OutputData): string {
 
   for (const enumDef of output.enums) {
     lines.push("");
+    if (enumDef.sourceInfo) {
+      lines.push(`// ${enumDef.sourceInfo.sourceFile || enumDef.sourceInfo.moduleName}:${enumDef.sourceInfo.line}`);
+    }
     lines.push(`enum ${enumDef.name} /* stored as ${enumDef.underlyingTypeName} */ {`);
     for (const val of enumDef.values) {
       lines.push(`\t${val.name} = ${formatVariant(val.value)},`);
@@ -448,6 +463,9 @@ function formatOutput(output: OutputData): string {
 
   for (const classDef of output.classes) {
     lines.push("");
+    if (classDef.sourceInfo) {
+      lines.push(`// ${classDef.sourceInfo.sourceFile || classDef.sourceInfo.moduleName}:${classDef.sourceInfo.line}`);
+    }
     let header = `${classDef.classKind} ${classDef.name} `;
     if (classDef.baseClasses.length > 0) {
       for (let i = 0; i < classDef.baseClasses.length; i++) {
@@ -488,12 +506,57 @@ function formatOutput(output: OutputData): string {
   return lines.join("\n") + "\n";
 }
 
+/** Build a map from TypeIndex to source file/module info using the IPI stream. */
+function buildSourceMap(pdb: PDB): Map<TypeIndex, SourceInfo> {
+  const map = new Map<TypeIndex, SourceInfo>();
+  const idInfo = pdb.idInformation;
+  if (!idInfo) return map;
+
+  const idFinder = new ItemFinder(idInfo);
+  const modules = pdb.modules;
+
+  for (const item of idInfo.items) {
+    let data: IdData;
+    try {
+      data = pdb.parseId(item);
+    } catch {
+      continue;
+    }
+
+    if (data.kind !== "UdtModuleSourceLine" && data.kind !== "UdtSourceLine") {
+      continue;
+    }
+
+    // Resolve the source file name from the IdIndex
+    let sourceFile = "";
+    const sfItem = idFinder.find(data.sourceFile);
+    if (sfItem) {
+      try {
+        const sfData = pdb.parseId(sfItem);
+        if (sfData.kind === "StringId") {
+          sourceFile = sfData.name;
+        }
+      } catch { /* ignore */ }
+    }
+
+    let moduleName = "";
+    if (data.kind === "UdtModuleSourceLine" && data.module < modules.length) {
+      moduleName = modules[data.module].moduleName;
+    }
+
+    map.set(data.udtType, { sourceFile, moduleName, line: data.line });
+  }
+
+  return map;
+}
+
 function writeClass(filename: string, className: string): void {
   const data = require("fs").readFileSync(filename);
   const pdb = PDB.open(new Uint8Array(data));
 
   const typeInfo = pdb.typeInformation;
   const finder = new ItemFinder(typeInfo);
+  const sourceMap = buildSourceMap(pdb);
 
   const neededTypes: TypeSet = new Set();
   const output: OutputData = {
@@ -520,7 +583,7 @@ function writeClass(filename: string, className: string): void {
           typeData.kind === "Interface") &&
         !typeData.properties.isForwardReference
       ) {
-        addType(output, finder, pdb, item.index, neededTypes);
+        addType(output, finder, pdb, item.index, neededTypes, sourceMap);
         found = true;
       }
     } else if (
@@ -528,7 +591,7 @@ function writeClass(filename: string, className: string): void {
       typeData.name === className &&
       !typeData.properties.isForwardReference
     ) {
-      addType(output, finder, pdb, item.index, neededTypes);
+      addType(output, finder, pdb, item.index, neededTypes, sourceMap);
       found = true;
       break;
     }
@@ -542,7 +605,7 @@ function writeClass(filename: string, className: string): void {
       neededTypes.delete(next);
       if (processed.has(next)) continue;
       processed.add(next);
-      addType(output, finder, pdb, next, neededTypes);
+      addType(output, finder, pdb, next, neededTypes, sourceMap);
     }
   }
 
