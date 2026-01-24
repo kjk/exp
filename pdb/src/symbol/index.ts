@@ -51,7 +51,8 @@ import {
   S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
   S_DEFRANGE_REGISTER_REL,
   S_CALLEES, S_CALLERS, S_INLINEES,
-  type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType,
+  S_FRAMECOOKIE,
+  type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType, type FrameCookieType,
 } from "./constants.js";
 import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
 
@@ -453,6 +454,14 @@ export interface CoffGroupSymbol {
   name: string;
 }
 
+export interface FrameCookieSymbol {
+  kind: "FrameCookie";
+  offset: number;
+  register: Register;
+  cookieType: FrameCookieType;
+  flags: number;
+}
+
 // ─── DefRange Types ───
 
 /** Address range where a variable definition is valid. */
@@ -575,7 +584,8 @@ export type SymbolData =
   | DefRangeFramePointerRelFullScopeSymbol
   | DefRangeRegisterRelSymbol
   | FunctionListSymbol
-  | InlineesSymbol;
+  | InlineesSymbol
+  | FrameCookieSymbol;
 
 /** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
@@ -1015,6 +1025,14 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       const offset = readSectionOffset(buf);
       const name = buf.readCString();
       return { kind: "CoffGroup", length, characteristics, offset, name };
+    }
+
+    case S_FRAMECOOKIE: {
+      const offset = buf.readI32();
+      const register: Register = buf.readU16();
+      const cookieType = buf.readU8() as FrameCookieType;
+      const flags = buf.readU8();
+      return { kind: "FrameCookie", offset, register, cookieType, flags };
     }
 
     case S_DEFRANGE: {

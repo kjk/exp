@@ -176,12 +176,14 @@ export type {
   DefRangeRegisterRelSymbol,
   FunctionListSymbol,
   InlineesSymbol,
+  FrameCookieSymbol,
 } from "./symbol/index.js";
 export {
   CPUType,
   SourceLanguage,
   ThunkKind,
   TrampolineType,
+  FrameCookieType,
   symbolStartsScope,
   symbolEndsScope,
   iterateBinaryAnnotations,

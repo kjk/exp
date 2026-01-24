@@ -335,3 +335,11 @@ export enum TrampolineType {
   Incremental = 0,
   BranchIsland = 1,
 }
+
+/** CV_cookietype_e - Frame cookie type for S_FRAMECOOKIE. */
+export enum FrameCookieType {
+  Copy = 0,
+  XorStackPointer = 1,
+  XorBasePointer = 2,
+  XorR13 = 3,
+}
