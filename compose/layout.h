@@ -136,6 +136,7 @@ class LayoutNode {
     bool measured_ = false;
     float weight_ = 0.0f;
     bool fillWeight_ = true;
+    bool matchParentSize_ = false;
 
 public:
     explicit LayoutNode(MeasurePolicy* policy, LayoutNodeVec children = {});
@@ -157,6 +158,12 @@ public:
     LayoutNode* setWeight(float w, bool fill = true) { weight_ = w; fillWeight_ = fill; return this; }
     float weight() const { return weight_; }
     bool fillWeight() const { return fillWeight_; }
+
+    // matchParentSize: within a Box, this child does not influence the Box's
+    // own size but instead receives exact constraints equal to the Box's
+    // resolved size (determined by other children).
+    LayoutNode* setMatchParentSize(bool v = true) { matchParentSize_ = v; return this; }
+    bool matchParentSize() const { return matchParentSize_; }
 
     int measuredWidth() const { return measuredWidth_; }
     int measuredHeight() const { return measuredHeight_; }
