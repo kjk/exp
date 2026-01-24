@@ -12,6 +12,15 @@ function printRow(offset: PdbInternalSectionOffset, kind: string, name: string):
   console.log(`${offset.section.toString(16)}\t${offset.offset.toString(16)}\t${kind}\t${name}`);
 }
 
+function isPrintableSymbol(pdb: PDB, symbol: RawSymbol): boolean {
+  try {
+    const data = pdb.parseSymbol(symbol);
+    return data.kind === "Public" || data.kind === "Data" || data.kind === "Procedure";
+  } catch {
+    return false;
+  }
+}
+
 function printSymbol(pdb: PDB, symbol: RawSymbol): void {
   let data: SymbolData;
   try {
@@ -53,12 +62,10 @@ function dumpPdb(filename: string): void {
 
   console.log("\nModule private symbols:");
   for (const module of pdb.modules) {
-    console.log(`\nModule: ${module.objectFileName}`);
     const info = pdb.getModuleInfo(module);
-    if (!info) {
-      console.log("  no module info");
-      continue;
-    }
+    if (!info) continue;
+    if (!info.symbols.some(s => isPrintableSymbol(pdb, s))) continue;
+    console.log(`\nModule: ${module.objectFileName}`);
     walkSymbols(pdb, info.symbols);
   }
 }
