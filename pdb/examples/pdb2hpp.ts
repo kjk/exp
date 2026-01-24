@@ -103,6 +103,9 @@ function primitiveTypeName(index: TypeIndex): string {
     case 0x69: name = "uint8_t"; break;
     case 0x70: name = "char"; break; // RCHAR
     case 0x71: name = "wchar_t"; break;
+    case 0x7a: name = "char16_t"; break; // RChar16
+    case 0x7b: name = "char32_t"; break; // RChar32
+    case 0x7c: name = "char8_t"; break;  // C++20 char8_t
     case 0x72: name = "int16_t"; break;
     case 0x73: name = "uint16_t"; break;
     case 0x74: name = "int32_t"; break;
