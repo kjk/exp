@@ -549,6 +549,21 @@ int LeafPolicy::MaxIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) {
 }
 
 // ============================================================================
+// SpacerPolicy
+// ============================================================================
+
+MeasureResult SpacerPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
+    int w = constraints.hasFixedWidth() ? constraints.maxWidth : 0;
+    int h = constraints.hasFixedHeight() ? constraints.maxHeight : 0;
+    return {w, h};
+}
+
+int SpacerPolicy::MinIntrinsicWidth(LayoutNodeVec /*children*/, int /*height*/) { return 0; }
+int SpacerPolicy::MaxIntrinsicWidth(LayoutNodeVec /*children*/, int /*height*/) { return 0; }
+int SpacerPolicy::MinIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) { return 0; }
+int SpacerPolicy::MaxIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) { return 0; }
+
+// ============================================================================
 // FlowRowPolicy
 // ============================================================================
 
@@ -1080,6 +1095,10 @@ MeasureResult AspectRatioPolicy::Measure(LayoutNodeVec children, Constraints con
 
 LayoutNode* Leaf(LeafConfig config) {
     return new LayoutNode(new LeafPolicy(config));
+}
+
+LayoutNode* Spacer() {
+    return new LayoutNode(new SpacerPolicy());
 }
 
 LayoutNode* Row(RowConfig config, LayoutNodeVec children) {
