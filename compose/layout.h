@@ -288,6 +288,17 @@ public:
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
 };
 
+// Spacer: takes exact size if constraints are fixed, collapses to 0 otherwise.
+// Entirely driven by parent constraints or sizing modifiers.
+class SpacerPolicy : public MeasurePolicy {
+public:
+    MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+    int MinIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MaxIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MinIntrinsicHeight(LayoutNodeVec children, int width) override;
+    int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
+};
+
 struct FlowColumnConfig {
     int mainAxisSpacing = 0;
     int crossAxisSpacing = 0;
@@ -410,6 +421,7 @@ public:
 // ============================================================================
 
 LayoutNode* Leaf(LeafConfig config);
+LayoutNode* Spacer();
 LayoutNode* Row(RowConfig config, LayoutNodeVec children);
 LayoutNode* Column(ColumnConfig config, LayoutNodeVec children);
 LayoutNode* Box(BoxConfig config, LayoutNodeVec children);
