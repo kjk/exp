@@ -1,11 +1,12 @@
 /**
  * pdb2hpp - Generate C++ header declarations from PDB type information.
  *
- * Usage: bun run examples/pdb2hpp.ts <input.pdb> <ClassName>
+ * Usage: bun run examples/pdb2hpp.ts <input.pdb> <ClassName|*>
  *
  * Finds the named class/struct in the PDB type information and generates
  * a C++ header file with its definition, including base classes, fields,
  * and methods. Recursively resolves all dependent types.
+ * Use * as ClassName to dump all types.
  *
  * Ported from getsentry/pdb examples/pdb2hpp.rs
  */
@@ -543,8 +544,9 @@ function writeClass(filename: string, className: string): void {
     enums: [],
   };
 
-  // Find the target class
+  // Find the target class(es)
   let found = false;
+  const matchAll = className === "*";
   for (const item of typeInfo.items) {
     let typeData: TypeData;
     try {
@@ -553,7 +555,17 @@ function writeClass(filename: string, className: string): void {
       continue;
     }
 
-    if (
+    if (matchAll) {
+      if (
+        (typeData.kind === "Class" || typeData.kind === "Structure" ||
+          typeData.kind === "Enumeration" || typeData.kind === "Union" ||
+          typeData.kind === "Interface") &&
+        !typeData.properties.isForwardReference
+      ) {
+        addType(output, finder, pdb, item.index, neededTypes);
+        found = true;
+      }
+    } else if (
       (typeData.kind === "Class" || typeData.kind === "Structure") &&
       typeData.name === className &&
       !typeData.properties.isForwardReference
@@ -564,18 +576,20 @@ function writeClass(filename: string, className: string): void {
     }
   }
 
-  // Resolve all needed types iteratively
-  const processed = new Set<TypeIndex>();
-  while (neededTypes.size > 0) {
-    const next = [...neededTypes].pop()!;
-    neededTypes.delete(next);
-    if (processed.has(next)) continue;
-    processed.add(next);
-    addType(output, finder, pdb, next, neededTypes);
+  // Resolve all needed types iteratively (skip when dumping all, since everything is already added)
+  if (!matchAll) {
+    const processed = new Set<TypeIndex>();
+    while (neededTypes.size > 0) {
+      const next = [...neededTypes].pop()!;
+      neededTypes.delete(next);
+      if (processed.has(next)) continue;
+      processed.add(next);
+      addType(output, finder, pdb, next, neededTypes);
+    }
   }
 
   if (!found) {
-    console.error(`sorry, class ${className} was not found`);
+    console.error(matchAll ? "no types found in PDB" : `sorry, class ${className} was not found`);
   } else {
     process.stdout.write(formatOutput(output));
   }
@@ -586,7 +600,7 @@ const filename = process.argv[2];
 const className = process.argv[3];
 
 if (!filename || !className) {
-  console.error("Usage: bun run examples/pdb2hpp.ts <input.pdb> <ClassName>");
+  console.error("Usage: bun run examples/pdb2hpp.ts <input.pdb> <ClassName|*>");
   process.exit(1);
 }
 
