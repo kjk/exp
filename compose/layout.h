@@ -26,7 +26,7 @@
 #include <span>
 #include <vector>
 
-namespace compose {
+namespace layout {
 
 static constexpr int Infinity = std::numeric_limits<int>::max();
 
@@ -600,4 +600,4 @@ LayoutNode* SizeIn(LayoutNode* child, SizeInConfig config);
 LayoutNode* AspectRatio(LayoutNode* child, AspectRatioConfig config);
 LayoutNode* AspectRatio(LayoutNode* child, float ratio);
 
-} // namespace compose
+} // namespace layout

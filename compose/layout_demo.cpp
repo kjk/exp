@@ -7,7 +7,7 @@
 
 #include <cstdio>
 
-using namespace compose;
+using namespace layout;
 
 static void printBounds(const LayoutNode& root) {
     std::vector<LayoutNode::Rect> rects;

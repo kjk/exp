@@ -2,7 +2,7 @@
 
 #include <numeric>
 
-namespace compose {
+namespace layout {
 
 // ============================================================================
 // LayoutNodeVec
@@ -1528,4 +1528,4 @@ LayoutNode* AspectRatio(LayoutNode* child, float ratio) {
     return AspectRatio(child, {.ratio = ratio});
 }
 
-} // namespace compose
+} // namespace layout
