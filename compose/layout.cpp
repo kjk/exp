@@ -555,6 +555,7 @@ int LeafPolicy::MaxIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) {
 // FlowRow lays out children horizontally, wrapping to the next line when a child
 // would overflow the available width. Each line is independently arranged, and
 // lines are stacked vertically with crossAxisSpacing between them.
+// Supports maxLines, overflow handling, and per-line weight distribution.
 MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
     int n = children.size();
     if (n == 0) {
@@ -563,20 +564,22 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
 
     int maxWidth = constraints.hasBoundedWidth() ? constraints.maxWidth : Infinity;
 
-    // Phase 1: Measure all children with loosened constraints (each child can be
-    // at most the full available width, no minimum forced).
-    std::vector<Placeable> placeables;
-    placeables.reserve(n);
-    for (auto* child : children) {
+    // Phase 1: Measure non-weighted children with loosened constraints.
+    // Weighted children are deferred to per-line distribution.
+    std::vector<Placeable> placeables(n, Placeable(nullptr));
+    std::vector<int> measuredWidths(n, 0);
+    for (int i = 0; i < n; i++) {
+        if (children[i]->weight() > 0.0f) continue;
         Constraints childConstraints = {0, maxWidth, 0, constraints.maxHeight};
-        placeables.push_back(child->measure(childConstraints));
+        placeables[i] = children[i]->measure(childConstraints);
+        measuredWidths[i] = placeables[i].width();
     }
 
     // Phase 2: Break children into lines based on available width.
     struct Line {
         int startIdx;
         int count;
-        int width;   // total width of items + spacing
+        int width;   // total width of non-weighted items + spacing
         int height;  // tallest item in this line
     };
     std::vector<Line> lines;
@@ -586,7 +589,7 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
     int lineCount = 0;
 
     for (int i = 0; i < n; i++) {
-        int childWidth = placeables[i].width();
+        int childWidth = measuredWidths[i];
         int spacingBefore = (lineCount > 0) ? config_.mainAxisSpacing : 0;
         int projectedWidth = lineWidth + spacingBefore + childWidth;
 
@@ -594,46 +597,118 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
         bool maxItems = (config_.maxItemsInEachRow > 0) && (lineCount >= config_.maxItemsInEachRow);
 
         if (overflow || maxItems) {
-            // Finalize current line
             lines.push_back({lineStart, lineCount, lineWidth, lineHeight});
             lineStart = i;
             lineWidth = childWidth;
-            lineHeight = placeables[i].height();
+            lineHeight = (children[i]->weight() > 0.0f) ? 0 : placeables[i].height();
             lineCount = 1;
         } else {
             lineWidth = projectedWidth;
-            lineHeight = std::max(lineHeight, placeables[i].height());
+            if (children[i]->weight() <= 0.0f) {
+                lineHeight = std::max(lineHeight, placeables[i].height());
+            }
             lineCount++;
         }
     }
-    // Finalize last line
     if (lineCount > 0) {
         lines.push_back({lineStart, lineCount, lineWidth, lineHeight});
     }
 
-    // Phase 3: Compute layout size.
+    // Apply maxLines limit.
+    int visibleLines = static_cast<int>(lines.size());
+    if (config_.maxLines > 0 && visibleLines > config_.maxLines) {
+        if (config_.overflow == FlowOverflow::Clip) {
+            visibleLines = config_.maxLines;
+        }
+    }
+
+    // Phase 2b: Measure weighted children per-line with remaining space.
+    for (int li = 0; li < visibleLines; li++) {
+        auto& line = lines[li];
+        float totalWeight = 0.0f;
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            float w = children[idx]->weight();
+            if (w > 0.0f) totalWeight += w;
+        }
+        if (totalWeight <= 0.0f) continue;
+
+        int lineSpacing = config_.mainAxisSpacing * (line.count - 1);
+        int remaining = (maxWidth != Infinity)
+            ? std::max(0, maxWidth - line.width - lineSpacing * (totalWeight > 0.0f ? 1 : 0))
+            : 0;
+        // Subtract spacing slots for weighted items not yet accounted for.
+        // line.width already includes spacing for non-weighted items; we need to add
+        // spacing for weighted items.
+        int weightedCount = 0;
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            if (children[idx]->weight() > 0.0f) weightedCount++;
+        }
+        // Recalculate: total occupied = non-weighted widths + all spacing
+        int nonWeightedWidth = 0;
+        int nonWeightedCount = 0;
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            if (children[idx]->weight() <= 0.0f) {
+                nonWeightedWidth += measuredWidths[idx];
+                nonWeightedCount++;
+            }
+        }
+        int allSpacing = config_.mainAxisSpacing * (line.count - 1);
+        remaining = (maxWidth != Infinity)
+            ? std::max(0, maxWidth - nonWeightedWidth - allSpacing)
+            : 0;
+
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            float w = children[idx]->weight();
+            if (w <= 0.0f) continue;
+            int allocation = static_cast<int>(remaining * (w / totalWeight));
+            Constraints wc;
+            if (children[idx]->fillWeight()) {
+                wc = {allocation, allocation, 0, constraints.maxHeight};
+            } else {
+                wc = {0, allocation, 0, constraints.maxHeight};
+            }
+            placeables[idx] = children[idx]->measure(wc);
+            measuredWidths[idx] = placeables[idx].width();
+            line.height = std::max(line.height, placeables[idx].height());
+        }
+        // Recalculate line width including weighted items.
+        int newWidth = 0;
+        for (int i = 0; i < line.count; i++) {
+            int idx = line.startIdx + i;
+            if (i > 0) newWidth += config_.mainAxisSpacing;
+            newWidth += measuredWidths[idx];
+        }
+        line.width = newWidth;
+    }
+
+    // Phase 3: Compute layout size (only for visible lines).
     int layoutWidth = 0;
-    for (auto& line : lines) {
-        layoutWidth = std::max(layoutWidth, line.width);
+    for (int li = 0; li < visibleLines; li++) {
+        layoutWidth = std::max(layoutWidth, lines[li].width);
     }
     layoutWidth = constraints.constrainWidth(layoutWidth);
 
     int totalHeight = 0;
-    for (size_t li = 0; li < lines.size(); li++) {
+    for (int li = 0; li < visibleLines; li++) {
         totalHeight += lines[li].height;
         if (li > 0) totalHeight += config_.crossAxisSpacing;
     }
     int layoutHeight = constraints.constrainHeight(totalHeight);
 
-    // Phase 4: Place children line by line.
+    // Phase 4: Place children line by line (only visible lines).
     int yOffset = 0;
-    for (auto& line : lines) {
+    for (int li = 0; li < visibleLines; li++) {
+        auto& line = lines[li];
         int xOffset = 0;
         for (int i = 0; i < line.count; i++) {
             int idx = line.startIdx + i;
             int crossOffset = align(config_.crossAxisAlignment, placeables[idx].height(), line.height);
             placeables[idx].placeAt(xOffset, yOffset + crossOffset);
-            xOffset += placeables[idx].width() + config_.mainAxisSpacing;
+            xOffset += measuredWidths[idx] + config_.mainAxisSpacing;
         }
         yOffset += line.height + config_.crossAxisSpacing;
     }
@@ -648,6 +723,7 @@ MeasureResult FlowRowPolicy::Measure(LayoutNodeVec children, Constraints constra
 // FlowColumn lays out children vertically, wrapping to the next column when a child
 // would overflow the available height. Each column is independently arranged, and
 // columns are placed horizontally with crossAxisSpacing between them.
+// Supports maxColumns, overflow handling, and per-column weight distribution.
 MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints constraints) {
     int n = children.size();
     if (n == 0) {
@@ -656,12 +732,14 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
 
     int maxHeight = constraints.hasBoundedHeight() ? constraints.maxHeight : Infinity;
 
-    // Phase 1: Measure all children with loosened constraints.
-    std::vector<Placeable> placeables;
-    placeables.reserve(n);
-    for (auto* child : children) {
+    // Phase 1: Measure non-weighted children with loosened constraints.
+    std::vector<Placeable> placeables(n, Placeable(nullptr));
+    std::vector<int> measuredHeights(n, 0);
+    for (int i = 0; i < n; i++) {
+        if (children[i]->weight() > 0.0f) continue;
         Constraints childConstraints = {0, constraints.maxWidth, 0, maxHeight};
-        placeables.push_back(child->measure(childConstraints));
+        placeables[i] = children[i]->measure(childConstraints);
+        measuredHeights[i] = placeables[i].height();
     }
 
     // Phase 2: Break children into columns based on available height.
@@ -678,7 +756,7 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
     int colCount = 0;
 
     for (int i = 0; i < n; i++) {
-        int childHeight = placeables[i].height();
+        int childHeight = measuredHeights[i];
         int spacingBefore = (colCount > 0) ? config_.mainAxisSpacing : 0;
         int projectedHeight = colHeight + spacingBefore + childHeight;
 
@@ -689,11 +767,13 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
             columns.push_back({colStart, colCount, colWidth, colHeight});
             colStart = i;
             colHeight = childHeight;
-            colWidth = placeables[i].width();
+            colWidth = (children[i]->weight() > 0.0f) ? 0 : placeables[i].width();
             colCount = 1;
         } else {
             colHeight = projectedHeight;
-            colWidth = std::max(colWidth, placeables[i].width());
+            if (children[i]->weight() <= 0.0f) {
+                colWidth = std::max(colWidth, placeables[i].width());
+            }
             colCount++;
         }
     }
@@ -701,29 +781,86 @@ MeasureResult FlowColumnPolicy::Measure(LayoutNodeVec children, Constraints cons
         columns.push_back({colStart, colCount, colWidth, colHeight});
     }
 
-    // Phase 3: Compute layout size.
+    // Apply maxColumns limit.
+    int visibleCols = static_cast<int>(columns.size());
+    if (config_.maxColumns > 0 && visibleCols > config_.maxColumns) {
+        if (config_.overflow == FlowOverflow::Clip) {
+            visibleCols = config_.maxColumns;
+        }
+    }
+
+    // Phase 2b: Measure weighted children per-column with remaining space.
+    for (int ci = 0; ci < visibleCols; ci++) {
+        auto& col = columns[ci];
+        float totalWeight = 0.0f;
+        for (int i = 0; i < col.count; i++) {
+            int idx = col.startIdx + i;
+            float w = children[idx]->weight();
+            if (w > 0.0f) totalWeight += w;
+        }
+        if (totalWeight <= 0.0f) continue;
+
+        int nonWeightedHeight = 0;
+        for (int i = 0; i < col.count; i++) {
+            int idx = col.startIdx + i;
+            if (children[idx]->weight() <= 0.0f) {
+                nonWeightedHeight += measuredHeights[idx];
+            }
+        }
+        int allSpacing = config_.mainAxisSpacing * (col.count - 1);
+        int remaining = (maxHeight != Infinity)
+            ? std::max(0, maxHeight - nonWeightedHeight - allSpacing)
+            : 0;
+
+        for (int i = 0; i < col.count; i++) {
+            int idx = col.startIdx + i;
+            float w = children[idx]->weight();
+            if (w <= 0.0f) continue;
+            int allocation = static_cast<int>(remaining * (w / totalWeight));
+            Constraints wc;
+            if (children[idx]->fillWeight()) {
+                wc = {0, constraints.maxWidth, allocation, allocation};
+            } else {
+                wc = {0, constraints.maxWidth, 0, allocation};
+            }
+            placeables[idx] = children[idx]->measure(wc);
+            measuredHeights[idx] = placeables[idx].height();
+            col.width = std::max(col.width, placeables[idx].width());
+        }
+        // Recalculate column height.
+        int newHeight = 0;
+        for (int i = 0; i < col.count; i++) {
+            int idx = col.startIdx + i;
+            if (i > 0) newHeight += config_.mainAxisSpacing;
+            newHeight += measuredHeights[idx];
+        }
+        col.height = newHeight;
+    }
+
+    // Phase 3: Compute layout size (only for visible columns).
     int layoutHeight = 0;
-    for (auto& col : columns) {
-        layoutHeight = std::max(layoutHeight, col.height);
+    for (int ci = 0; ci < visibleCols; ci++) {
+        layoutHeight = std::max(layoutHeight, columns[ci].height);
     }
     layoutHeight = constraints.constrainHeight(layoutHeight);
 
     int totalWidth = 0;
-    for (size_t ci = 0; ci < columns.size(); ci++) {
+    for (int ci = 0; ci < visibleCols; ci++) {
         totalWidth += columns[ci].width;
         if (ci > 0) totalWidth += config_.crossAxisSpacing;
     }
     int layoutWidth = constraints.constrainWidth(totalWidth);
 
-    // Phase 4: Place children column by column.
+    // Phase 4: Place children column by column (only visible columns).
     int xOffset = 0;
-    for (auto& col : columns) {
+    for (int ci = 0; ci < visibleCols; ci++) {
+        auto& col = columns[ci];
         int yOffset = 0;
         for (int i = 0; i < col.count; i++) {
             int idx = col.startIdx + i;
             int crossOffset = align(config_.crossAxisAlignment, placeables[idx].width(), col.width);
             placeables[idx].placeAt(xOffset + crossOffset, yOffset);
-            yOffset += placeables[idx].height() + config_.mainAxisSpacing;
+            yOffset += measuredHeights[idx] + config_.mainAxisSpacing;
         }
         xOffset += col.width + config_.crossAxisSpacing;
     }
