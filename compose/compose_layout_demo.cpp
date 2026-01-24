@@ -202,11 +202,14 @@ static void example_space_between() {
 // ============================================================================
 // Example 8: Custom MeasurePolicy
 // ============================================================================
-static void example_custom_policy() {
-    printf("=== Custom policy: diagonal layout ===\n");
 
-    auto diagonalPolicy = [](std::span<LayoutNode*> children,
-                             Constraints constraints) -> MeasureResult {
+class DiagonalPolicy : public MeasurePolicy {
+    int step_;
+
+public:
+    explicit DiagonalPolicy(int step = 20) : step_(step) {}
+
+    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
         int offsetX = 0;
         int offsetY = 0;
         int maxRight = 0;
@@ -217,15 +220,19 @@ static void example_custom_policy() {
             placeable.placeAt(offsetX, offsetY);
             maxRight = std::max(maxRight, offsetX + placeable.width());
             maxBottom = std::max(maxBottom, offsetY + placeable.height());
-            offsetX += 20;
-            offsetY += 20;
+            offsetX += step_;
+            offsetY += step_;
         }
 
         return {constraints.constrainWidth(maxRight),
                 constraints.constrainHeight(maxBottom)};
-    };
+    }
+};
 
-    auto root = Layout(diagonalPolicy, {
+static void example_custom_policy() {
+    printf("=== Custom policy: diagonal layout ===\n");
+
+    auto root = Layout(new DiagonalPolicy(20), {
         Leaf({.width = 40, .height = 40}),
         Leaf({.width = 40, .height = 40}),
         Leaf({.width = 40, .height = 40}),
