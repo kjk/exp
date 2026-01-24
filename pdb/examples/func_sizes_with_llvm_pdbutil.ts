@@ -8,15 +8,13 @@
  */
 
 import { execSync } from "child_process";
-import { PDB } from "../src/index.js";
 import * as fs from "fs";
 import * as path from "path";
 
 interface FuncEntry {
   name: string;
   size: number;
-  section: number;
-  offset: number;
+  rva: number;
 }
 
 function escapeCsv(s: string): string {
@@ -26,6 +24,32 @@ function escapeCsv(s: string): string {
   return s;
 }
 
+function extractFuncSizeNameRva(line: string): { size: number; name: string; rva: number } | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("func [")) return null;
+
+  // RVA: first 0x hex value after "["
+  const rvaMatch = trimmed.match(/\[0x([0-9A-Fa-f]+)/);
+  if (!rvaMatch) return null;
+  const rva = parseInt(rvaMatch[1], 16);
+
+  // Size: value after "sizeof="
+  const sizeMatch = trimmed.match(/sizeof=\s*(\d+)/);
+  if (!sizeMatch) return null;
+  const size = parseInt(sizeMatch[1], 10);
+
+  // Name: after "]", skip the first parenthesized group (frame type / section:offset)
+  const bracketEnd = trimmed.indexOf("]");
+  if (bracketEnd < 0) return null;
+  const afterBracket = trimmed.substring(bracketEnd + 1).trim();
+  // Skip one (...) group
+  const nameMatch = afterBracket.match(/^\([^)]*\)\s*(.*)/);
+  const name = nameMatch ? nameMatch[1].trim() : afterBracket.trim();
+  if (!name) return null;
+
+  return { size, name, rva };
+}
+
 function run(filename: string, writeRvaCsv: boolean): void {
   const output = execSync(
     `llvm-pdbutil pretty -module-syms -sym-types=funcs "${filename}"`,
@@ -33,39 +57,23 @@ function run(filename: string, writeRvaCsv: boolean): void {
   );
 
   const entries: FuncEntry[] = [];
-  const sizeofRe = /sizeof=(\d+)\]\s*\(([0-9A-Fa-f]+):([0-9A-Fa-f]+)\)\s*(.*)/;
 
   for (const line of output.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("func [")) continue;
-
-    const match = trimmed.match(sizeofRe);
-    if (!match) continue;
-
-    const size = parseInt(match[1], 10);
-    const section = parseInt(match[2], 16);
-    const offset = parseInt(match[3], 16);
-    const name = match[4].trim();
-    if (name) {
-      entries.push({ name, size, section, offset });
+    const parsed = extractFuncSizeNameRva(line);
+    if (parsed) {
+      entries.push(parsed);
     }
   }
 
   entries.sort((a, b) => a.size - b.size);
 
   if (writeRvaCsv) {
-    const data = fs.readFileSync(filename);
-    const pdb = PDB.open(new Uint8Array(data));
-    const addressMap = pdb.addressMap;
-
     const baseName = path.basename(filename, path.extname(filename));
     const csvPath = path.join(process.cwd(), `${baseName}_rva.csv`);
     const csvLines: string[] = [];
     csvLines.push("rva,function name");
     for (const e of entries) {
-      const rva = addressMap.sectionOffsetToRva({ section: e.section, offset: e.offset });
-      if (rva === null) continue;
-      csvLines.push(`0x${(rva as number).toString(16)},${escapeCsv(e.name)}`);
+      csvLines.push(`0x${e.rva.toString(16)},${escapeCsv(e.name)}`);
     }
     fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
     console.log(`Wrote ${csvLines.length - 1} entries to ${csvPath}`);

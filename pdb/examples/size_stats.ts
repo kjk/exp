@@ -139,16 +139,30 @@ function dumpSizeStats(filename: string, justRva: boolean): void {
   });
 
   // Deduplicate: when the same symbol appears multiple times at the same address,
-  // prefer module-private over global, and Data/Procedure over Public
+  // prefer module-private over global, and Data/Procedure over Public for the entry,
+  // but use the Public symbol's name since it has the decorated/mangled form
   {
     const best = new Map<string, RawEntry>();
+    const publicName = new Map<string, string>();
     for (const e of rawEntries) {
       const key = `${e.offset.section}:${e.offset.offset}`;
+      if (e.symbolKind === "Public") {
+        publicName.set(key, e.symbolName);
+      }
       const prev = best.get(key);
-      if (!prev ||
+      if (
+        !prev ||
         (prev.moduleName === "(global)" && e.moduleName !== "(global)") ||
-        (prev.symbolKind === "Public" && e.symbolKind !== "Public")) {
+        (prev.symbolKind === "Public" && e.symbolKind !== "Public")
+      ) {
         best.set(key, e);
+      }
+    }
+    // Override names with Public symbol names (more complete/decorated)
+    for (const [key, entry] of best) {
+      const pName = publicName.get(key);
+      if (pName) {
+        entry.symbolName = pName;
       }
     }
     rawEntries.length = 0;
@@ -198,9 +212,8 @@ function dumpSizeStats(filename: string, justRva: boolean): void {
     if (size <= 0) continue;
 
     const sectionIdx = entry.offset.section - 1;
-    const segmentName = sectionIdx < sectionHeaders.length
-      ? sectionHeaders[sectionIdx].name
-      : `section_${entry.offset.section}`;
+    const segmentName =
+      sectionIdx < sectionHeaders.length ? sectionHeaders[sectionIdx].name : `section_${entry.offset.section}`;
 
     const rvaValue = addressMap.sectionOffsetToRva(entry.offset);
     if (rvaValue === null) continue;
@@ -225,22 +238,21 @@ function dumpSizeStats(filename: string, justRva: boolean): void {
   if (justRva) {
     csvLines.push("rva,symbol name");
     for (const e of entries) {
-      csvLines.push([
-        `0x${e.rva.toString(16)}`,
-        escapeCsv(e.symbolName),
-      ].join(","));
+      csvLines.push([`0x${e.rva.toString(16)}`, escapeCsv(e.symbolName)].join(","));
     }
   } else {
     csvLines.push("rva,symbol size,symbol name,symbol kind,module name,segment name");
     for (const e of entries) {
-      csvLines.push([
-        `0x${e.rva.toString(16)}`,
-        `0x${e.size.toString(16)}`,
-        escapeCsv(e.symbolName),
-        escapeCsv(e.symbolKind),
-        escapeCsv(e.moduleName),
-        escapeCsv(e.segmentName),
-      ].join(","));
+      csvLines.push(
+        [
+          `0x${e.rva.toString(16)}`,
+          `0x${e.size.toString(16)}`,
+          escapeCsv(e.symbolName),
+          escapeCsv(e.symbolKind),
+          escapeCsv(e.moduleName),
+          escapeCsv(e.segmentName),
+        ].join(","),
+      );
     }
   }
   fs.writeFileSync(csvPath, csvLines.join("\n") + "\n");
@@ -254,9 +266,7 @@ function dumpSizeStats(filename: string, justRva: boolean): void {
 
   console.log(`\nTop ${top100.length} largest symbols (largest last):`);
   console.log("---");
-  const maxSizeWidth = top100.length > 0
-    ? top100[top100.length - 1].size.toString().length
-    : 0;
+  const maxSizeWidth = top100.length > 0 ? top100[top100.length - 1].size.toString().length : 0;
   for (const e of top100) {
     const sizeStr = e.size.toString().padStart(maxSizeWidth);
     console.log(`${sizeStr}  ${e.symbolName}  [${e.symbolKind}]`);
@@ -294,10 +304,10 @@ function dumpSizeStats(filename: string, justRva: boolean): void {
 
 // Main
 const args = process.argv.slice(2);
-const justRva = args.includes("-just-rva");
-const filename = args.find(a => !a.startsWith("-"));
+const justRva = args.includes("-rva");
+const filename = args.find((a) => !a.startsWith("-"));
 if (!filename) {
-  console.error("Usage: bun run examples/size_stats.ts [-just-rva] <input.pdb>");
+  console.error("Usage: bun run examples/size_stats.ts [-rva] <input.pdb>");
   process.exit(1);
 }
 
