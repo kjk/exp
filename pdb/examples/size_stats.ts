@@ -138,14 +138,16 @@ function dumpSizeStats(filename: string): void {
     return a.offset.offset - b.offset.offset;
   });
 
-  // Deduplicate: when the same symbol appears in both global and module-private
-  // tables, keep the module-private entry (has the actual object file path)
+  // Deduplicate: when the same symbol appears multiple times at the same address,
+  // prefer module-private over global, and Data/Procedure over Public
   {
     const best = new Map<string, RawEntry>();
     for (const e of rawEntries) {
       const key = `${e.offset.section}:${e.offset.offset}:${e.symbolName}`;
       const prev = best.get(key);
-      if (!prev || prev.moduleName === "(global)") {
+      if (!prev ||
+        (prev.moduleName === "(global)" && e.moduleName !== "(global)") ||
+        (prev.symbolKind === "Public" && e.symbolKind !== "Public")) {
         best.set(key, e);
       }
     }
