@@ -176,6 +176,7 @@ export type {
   DefRangeRegisterRelSymbol,
   FunctionListSymbol,
   InlineesSymbol,
+  FileStaticSymbol,
   FrameCookieSymbol,
 } from "./symbol/index.js";
 export {
