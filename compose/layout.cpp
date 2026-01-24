@@ -43,6 +43,47 @@ LayoutNode::~LayoutNode() {
     delete[] children_.els;
 }
 
+// ============================================================================
+// MeasurePolicy default intrinsics
+// ============================================================================
+
+int MeasurePolicy::MinIntrinsicWidth(LayoutNodeVec children, int height) {
+    // Default: measure with height constraint and return resulting width.
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->minIntrinsicWidth(height));
+    }
+    return maxW;
+}
+
+int MeasurePolicy::MaxIntrinsicWidth(LayoutNodeVec children, int height) {
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->maxIntrinsicWidth(height));
+    }
+    return maxW;
+}
+
+int MeasurePolicy::MinIntrinsicHeight(LayoutNodeVec children, int width) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->minIntrinsicHeight(width));
+    }
+    return maxH;
+}
+
+int MeasurePolicy::MaxIntrinsicHeight(LayoutNodeVec children, int width) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->maxIntrinsicHeight(width));
+    }
+    return maxH;
+}
+
+// ============================================================================
+// LayoutNode
+// ============================================================================
+
 Placeable LayoutNode::measure(Constraints constraints) {
     if (policy_) {
         auto result = policy_->Measure(children_, constraints);
@@ -51,6 +92,26 @@ Placeable LayoutNode::measure(Constraints constraints) {
     }
     measured_ = true;
     return Placeable(this);
+}
+
+int LayoutNode::minIntrinsicWidth(int height) {
+    if (policy_) return policy_->MinIntrinsicWidth(children_, height);
+    return 0;
+}
+
+int LayoutNode::maxIntrinsicWidth(int height) {
+    if (policy_) return policy_->MaxIntrinsicWidth(children_, height);
+    return 0;
+}
+
+int LayoutNode::minIntrinsicHeight(int width) {
+    if (policy_) return policy_->MinIntrinsicHeight(children_, width);
+    return 0;
+}
+
+int LayoutNode::maxIntrinsicHeight(int width) {
+    if (policy_) return policy_->MaxIntrinsicHeight(children_, width);
+    return 0;
 }
 
 void LayoutNode::collectBounds(std::vector<Rect>& out, int offsetX, int offsetY) const {
@@ -227,6 +288,42 @@ MeasureResult RowPolicy::Measure(LayoutNodeVec children, Constraints constraints
     return {layoutWidth, layoutHeight};
 }
 
+int RowPolicy::MinIntrinsicWidth(LayoutNodeVec children, int height) {
+    int n = children.size();
+    if (n == 0) return 0;
+    int total = config_.spacing * (n - 1);
+    for (auto* child : children) {
+        total += child->minIntrinsicWidth(height);
+    }
+    return total;
+}
+
+int RowPolicy::MaxIntrinsicWidth(LayoutNodeVec children, int height) {
+    int n = children.size();
+    if (n == 0) return 0;
+    int total = config_.spacing * (n - 1);
+    for (auto* child : children) {
+        total += child->maxIntrinsicWidth(height);
+    }
+    return total;
+}
+
+int RowPolicy::MinIntrinsicHeight(LayoutNodeVec children, int /*width*/) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->minIntrinsicHeight(Infinity));
+    }
+    return maxH;
+}
+
+int RowPolicy::MaxIntrinsicHeight(LayoutNodeVec children, int /*width*/) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->maxIntrinsicHeight(Infinity));
+    }
+    return maxH;
+}
+
 // ============================================================================
 // ColumnPolicy
 // ============================================================================
@@ -297,6 +394,42 @@ MeasureResult ColumnPolicy::Measure(LayoutNodeVec children, Constraints constrai
     return {layoutWidth, layoutHeight};
 }
 
+int ColumnPolicy::MinIntrinsicWidth(LayoutNodeVec children, int /*height*/) {
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->minIntrinsicWidth(Infinity));
+    }
+    return maxW;
+}
+
+int ColumnPolicy::MaxIntrinsicWidth(LayoutNodeVec children, int /*height*/) {
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->maxIntrinsicWidth(Infinity));
+    }
+    return maxW;
+}
+
+int ColumnPolicy::MinIntrinsicHeight(LayoutNodeVec children, int width) {
+    int n = children.size();
+    if (n == 0) return 0;
+    int total = config_.spacing * (n - 1);
+    for (auto* child : children) {
+        total += child->minIntrinsicHeight(width);
+    }
+    return total;
+}
+
+int ColumnPolicy::MaxIntrinsicHeight(LayoutNodeVec children, int width) {
+    int n = children.size();
+    if (n == 0) return 0;
+    int total = config_.spacing * (n - 1);
+    for (auto* child : children) {
+        total += child->maxIntrinsicHeight(width);
+    }
+    return total;
+}
+
 // ============================================================================
 // BoxPolicy
 // ============================================================================
@@ -338,6 +471,38 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
     return {layoutWidth, layoutHeight};
 }
 
+int BoxPolicy::MinIntrinsicWidth(LayoutNodeVec children, int height) {
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->minIntrinsicWidth(height));
+    }
+    return maxW;
+}
+
+int BoxPolicy::MaxIntrinsicWidth(LayoutNodeVec children, int height) {
+    int maxW = 0;
+    for (auto* child : children) {
+        maxW = std::max(maxW, child->maxIntrinsicWidth(height));
+    }
+    return maxW;
+}
+
+int BoxPolicy::MinIntrinsicHeight(LayoutNodeVec children, int width) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->minIntrinsicHeight(width));
+    }
+    return maxH;
+}
+
+int BoxPolicy::MaxIntrinsicHeight(LayoutNodeVec children, int width) {
+    int maxH = 0;
+    for (auto* child : children) {
+        maxH = std::max(maxH, child->maxIntrinsicHeight(width));
+    }
+    return maxH;
+}
+
 // ============================================================================
 // LeafPolicy
 // ============================================================================
@@ -345,6 +510,22 @@ MeasureResult BoxPolicy::Measure(LayoutNodeVec children, Constraints constraints
 MeasureResult LeafPolicy::Measure(LayoutNodeVec /*children*/, Constraints constraints) {
     return {constraints.constrainWidth(config_.width),
             constraints.constrainHeight(config_.height)};
+}
+
+int LeafPolicy::MinIntrinsicWidth(LayoutNodeVec /*children*/, int /*height*/) {
+    return config_.width;
+}
+
+int LeafPolicy::MaxIntrinsicWidth(LayoutNodeVec /*children*/, int /*height*/) {
+    return config_.width;
+}
+
+int LeafPolicy::MinIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) {
+    return config_.height;
+}
+
+int LeafPolicy::MaxIntrinsicHeight(LayoutNodeVec /*children*/, int /*width*/) {
+    return config_.height;
 }
 
 // ============================================================================

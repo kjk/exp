@@ -111,6 +111,14 @@ class MeasurePolicy {
 public:
     virtual ~MeasurePolicy() = default;
     virtual MeasureResult Measure(LayoutNodeVec children, Constraints constraints) = 0;
+
+    // Intrinsic measurement queries. These allow a parent to ask a child's
+    // preferred size before the actual measurement pass, without violating
+    // the single-measure rule.
+    virtual int MinIntrinsicWidth(LayoutNodeVec children, int height);
+    virtual int MaxIntrinsicWidth(LayoutNodeVec children, int height);
+    virtual int MinIntrinsicHeight(LayoutNodeVec children, int width);
+    virtual int MaxIntrinsicHeight(LayoutNodeVec children, int width);
 };
 
 // ============================================================================
@@ -135,6 +143,12 @@ public:
 
     Placeable measure(Constraints constraints);
     void place(int x, int y) { x_ = x; y_ = y; }
+
+    // Intrinsic measurement queries.
+    int minIntrinsicWidth(int height);
+    int maxIntrinsicWidth(int height);
+    int minIntrinsicHeight(int width);
+    int maxIntrinsicHeight(int width);
 
     // Weight support for Row/Column proportional sizing.
     // weight > 0 means this child participates in weighted distribution.
@@ -188,6 +202,10 @@ class RowPolicy : public MeasurePolicy {
 public:
     explicit RowPolicy(RowConfig config = {}) : config_(config) {}
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+    int MinIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MaxIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MinIntrinsicHeight(LayoutNodeVec children, int width) override;
+    int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
 };
 
 struct ColumnConfig {
@@ -201,6 +219,10 @@ class ColumnPolicy : public MeasurePolicy {
 public:
     explicit ColumnPolicy(ColumnConfig config = {}) : config_(config) {}
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+    int MinIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MaxIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MinIntrinsicHeight(LayoutNodeVec children, int width) override;
+    int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
 };
 
 struct BoxConfig {
@@ -213,6 +235,10 @@ class BoxPolicy : public MeasurePolicy {
 public:
     explicit BoxPolicy(BoxConfig config = {}) : config_(config) {}
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+    int MinIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MaxIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MinIntrinsicHeight(LayoutNodeVec children, int width) override;
+    int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
 };
 
 struct LeafConfig {
@@ -225,6 +251,10 @@ class LeafPolicy : public MeasurePolicy {
 public:
     explicit LeafPolicy(LeafConfig config) : config_(config) {}
     MeasureResult Measure(LayoutNodeVec children, Constraints constraints) override;
+    int MinIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MaxIntrinsicWidth(LayoutNodeVec children, int height) override;
+    int MinIntrinsicHeight(LayoutNodeVec children, int width) override;
+    int MaxIntrinsicHeight(LayoutNodeVec children, int width) override;
 };
 
 struct FlowRowConfig {
