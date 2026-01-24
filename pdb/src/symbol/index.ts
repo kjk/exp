@@ -45,6 +45,11 @@ import {
   S_MANYREG_ST, S_MANYREG,
   S_MANYREG2_ST, S_MANYREG2,
   S_MANCONSTANT,
+  S_DEFRANGE, S_DEFRANGE_SUBFIELD,
+  S_DEFRANGE_REGISTER, S_DEFRANGE_FRAMEPOINTER_REL,
+  S_DEFRANGE_SUBFIELD_REGISTER,
+  S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE,
+  S_DEFRANGE_REGISTER_REL,
   type CPUType, type SourceLanguage, type ThunkKind, type TrampolineType,
 } from "./constants.js";
 import { cpuTypeFromU16, sourceLanguageFromU8 } from "./constants.js";
@@ -447,6 +452,75 @@ export interface CoffGroupSymbol {
   name: string;
 }
 
+// ─── DefRange Types ───
+
+/** Address range where a variable definition is valid. */
+export interface LocalAddressRange {
+  offsetStart: number;
+  sectionStart: number;
+  length: number;
+}
+
+/** A gap in the address range where the variable is not available. */
+export interface LocalAddressGap {
+  startOffset: number;
+  length: number;
+}
+
+export interface DefRangeSymbol {
+  kind: "DefRange";
+  program: number;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
+export interface DefRangeSubfieldSymbol {
+  kind: "DefRangeSubfield";
+  program: number;
+  offsetInParent: number;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
+export interface DefRangeRegisterSymbol {
+  kind: "DefRangeRegister";
+  register: Register;
+  mayHaveNoName: boolean;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
+export interface DefRangeFramePointerRelSymbol {
+  kind: "DefRangeFramePointerRel";
+  offset: number;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
+export interface DefRangeSubfieldRegisterSymbol {
+  kind: "DefRangeSubfieldRegister";
+  register: Register;
+  mayHaveNoName: boolean;
+  offsetInParent: number;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
+export interface DefRangeFramePointerRelFullScopeSymbol {
+  kind: "DefRangeFramePointerRelFullScope";
+  offset: number;
+}
+
+export interface DefRangeRegisterRelSymbol {
+  kind: "DefRangeRegisterRel";
+  baseRegister: Register;
+  spilledUdtMember: boolean;
+  offsetInParent: number;
+  basePointerOffset: number;
+  range: LocalAddressRange;
+  gaps: LocalAddressGap[];
+}
+
 export type SymbolData =
   | ObjNameSymbol
   | RegisterVariableSymbol
@@ -478,7 +552,14 @@ export type SymbolData =
   | CallSiteInfoSymbol
   | EnvironmentBlockSymbol
   | SectionSymbol
-  | CoffGroupSymbol;
+  | CoffGroupSymbol
+  | DefRangeSymbol
+  | DefRangeSubfieldSymbol
+  | DefRangeRegisterSymbol
+  | DefRangeFramePointerRelSymbol
+  | DefRangeSubfieldRegisterSymbol
+  | DefRangeFramePointerRelFullScopeSymbol
+  | DefRangeRegisterRelSymbol;
 
 /** Iterator for symbol records, skipping alignment padding. */
 export function* iterateSymbols(data: Uint8Array): Generator<RawSymbol> {
@@ -920,6 +1001,80 @@ function parseSymbolRecord(buf: ParseBuffer, kind: number): SymbolData {
       return { kind: "CoffGroup", length, characteristics, offset, name };
     }
 
+    case S_DEFRANGE: {
+      const program = buf.readU32();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return { kind: "DefRange", program, range, gaps };
+    }
+
+    case S_DEFRANGE_SUBFIELD: {
+      const program = buf.readU32();
+      const offsetInParent = buf.readU32();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return { kind: "DefRangeSubfield", program, offsetInParent, range, gaps };
+    }
+
+    case S_DEFRANGE_REGISTER: {
+      const register: Register = buf.readU16();
+      const attr = buf.readU16();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return {
+        kind: "DefRangeRegister",
+        register,
+        mayHaveNoName: (attr & 0x01) !== 0,
+        range,
+        gaps,
+      };
+    }
+
+    case S_DEFRANGE_FRAMEPOINTER_REL: {
+      const offset = buf.readI32();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return { kind: "DefRangeFramePointerRel", offset, range, gaps };
+    }
+
+    case S_DEFRANGE_SUBFIELD_REGISTER: {
+      const register: Register = buf.readU16();
+      const attr = buf.readU16();
+      const offsetInParent = buf.readU32();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return {
+        kind: "DefRangeSubfieldRegister",
+        register,
+        mayHaveNoName: (attr & 0x01) !== 0,
+        offsetInParent,
+        range,
+        gaps,
+      };
+    }
+
+    case S_DEFRANGE_FRAMEPOINTER_REL_FULL_SCOPE: {
+      const offset = buf.readI32();
+      return { kind: "DefRangeFramePointerRelFullScope", offset };
+    }
+
+    case S_DEFRANGE_REGISTER_REL: {
+      const baseRegister: Register = buf.readU16();
+      const flagsVal = buf.readU16();
+      const basePointerOffset = buf.readI32();
+      const range = readLocalAddressRange(buf);
+      const gaps = readGaps(buf);
+      return {
+        kind: "DefRangeRegisterRel",
+        baseRegister,
+        spilledUdtMember: (flagsVal & 0x01) !== 0,
+        offsetInParent: (flagsVal >>> 4) & 0xfff,
+        basePointerOffset,
+        range,
+        gaps,
+      };
+    }
+
     default:
       throw PdbError.unimplementedSymbolKind(kind);
   }
@@ -953,6 +1108,25 @@ function parseOptionalName(buf: ParseBuffer, kind: number): string | null {
   }
   if (buf.isEmpty) return null;
   return buf.readCString();
+}
+
+/** Read a CV_LVAR_ADDR_RANGE: offStart(u32) + isectStart(u16) + cbRange(u16). */
+function readLocalAddressRange(buf: ParseBuffer): LocalAddressRange {
+  const offsetStart = buf.readU32();
+  const sectionStart = buf.readU16();
+  const length = buf.readU16();
+  return { offsetStart, sectionStart, length };
+}
+
+/** Read remaining bytes as CV_LVAR_ADDR_GAP entries (4 bytes each). */
+function readGaps(buf: ParseBuffer): LocalAddressGap[] {
+  const gaps: LocalAddressGap[] = [];
+  while (buf.remaining >= 4) {
+    const startOffset = buf.readU16();
+    const length = buf.readU16();
+    gaps.push({ startOffset, length });
+  }
+  return gaps;
 }
 
 /** Returns true if the given symbol kind starts a new scope. */

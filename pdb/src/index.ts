@@ -165,6 +165,15 @@ export type {
   SectionSymbol,
   CoffGroupSymbol,
   BinaryAnnotation,
+  LocalAddressRange,
+  LocalAddressGap,
+  DefRangeSymbol,
+  DefRangeSubfieldSymbol,
+  DefRangeRegisterSymbol,
+  DefRangeFramePointerRelSymbol,
+  DefRangeSubfieldRegisterSymbol,
+  DefRangeFramePointerRelFullScopeSymbol,
+  DefRangeRegisterRelSymbol,
 } from "./symbol/index.js";
 export {
   CPUType,
