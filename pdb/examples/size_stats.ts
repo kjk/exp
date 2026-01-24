@@ -249,6 +249,35 @@ function dumpSizeStats(filename: string): void {
     const sizeStr = e.size.toString().padStart(maxSizeWidth);
     console.log(`${sizeStr}  ${e.symbolName}  [${e.symbolKind}]`);
   }
+
+  // Check for overlaps and duplicates based on rva/size
+  const byRva = [...entries].sort((a, b) => a.rva - b.rva);
+  const overlaps: { a: SizeEntry; b: SizeEntry }[] = [];
+  for (let i = 0; i < byRva.length - 1; i++) {
+    const a = byRva[i];
+    const b = byRva[i + 1];
+    if (a.rva + a.size > b.rva) {
+      overlaps.push({ a, b });
+    }
+  }
+
+  if (overlaps.length > 0) {
+    console.log(`\nOverlaps/duplicates found: ${overlaps.length}`);
+    console.log("---");
+    for (const { a, b } of overlaps) {
+      const aEnd = a.rva + a.size;
+      const overlapSize = aEnd - b.rva;
+      if (a.rva === b.rva && a.size === b.size) {
+        console.log(`DUPLICATE at 0x${a.rva.toString(16)} size=0x${a.size.toString(16)}:`);
+      } else {
+        console.log(`OVERLAP of 0x${overlapSize.toString(16)} bytes:`);
+      }
+      console.log(`  ${a.symbolName}  [${a.symbolKind}]  rva=0x${a.rva.toString(16)} size=0x${a.size.toString(16)}`);
+      console.log(`  ${b.symbolName}  [${b.symbolKind}]  rva=0x${b.rva.toString(16)} size=0x${b.size.toString(16)}`);
+    }
+  } else {
+    console.log("\nNo overlaps or duplicates found.");
+  }
 }
 
 // Main
