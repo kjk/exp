@@ -95,6 +95,10 @@ export {
   CallingConvention,
   PointerKind,
   PointerMode,
+  isStaticMethod,
+  isVirtualMethod,
+  isPureVirtualMethod,
+  isIntroVirtualMethod,
 } from "./tpi/types.js";
 export type { RawItem, TypeInformation } from "./tpi/parser.js";
 export { ItemFinder } from "./tpi/parser.js";

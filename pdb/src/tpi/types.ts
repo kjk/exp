@@ -76,6 +76,28 @@ export function parseFieldAttributes(raw: number): FieldAttributes {
   };
 }
 
+/** Returns true if the method is static. */
+export function isStaticMethod(attr: FieldAttributes): boolean {
+  return attr.mprop === MethodKind.Static;
+}
+
+/** Returns true if the method is virtual. */
+export function isVirtualMethod(attr: FieldAttributes): boolean {
+  return attr.mprop === MethodKind.Virtual;
+}
+
+/** Returns true if the method is pure virtual (includes pure introducing virtual). */
+export function isPureVirtualMethod(attr: FieldAttributes): boolean {
+  return attr.mprop === MethodKind.PureVirtual ||
+    attr.mprop === MethodKind.PureIntroducingVirtual;
+}
+
+/** Returns true if the method is an introducing virtual (includes pure introducing virtual). */
+export function isIntroVirtualMethod(attr: FieldAttributes): boolean {
+  return attr.mprop === MethodKind.IntroducingVirtual ||
+    attr.mprop === MethodKind.PureIntroducingVirtual;
+}
+
 /** The kind of a PointerType. */
 export enum PointerKind {
   Near16 = 0x00,

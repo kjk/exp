@@ -13,10 +13,10 @@ import type {
 import {
   parseTypeProperties,
   parseFieldAttributes,
+  isIntroVirtualMethod,
   parsePointerAttributes,
   parseFunctionAttributes,
   PointerMode,
-  MethodKind,
 } from "./types.js";
 
 /** Header of the TPI/IPI stream. */
@@ -361,8 +361,7 @@ function parseTypeRecord(buf: ParseBuffer, kind: number): TypeData {
         const methodType: TypeIndex = buf.readU32();
         let vtableOffset: number | null = null;
         if (
-          attributes.mprop === MethodKind.IntroducingVirtual ||
-          attributes.mprop === MethodKind.PureIntroducingVirtual
+          isIntroVirtualMethod(attributes)
         ) {
           vtableOffset = buf.readU32();
         }
@@ -465,10 +464,7 @@ function parseFieldRecord(buf: ParseBuffer, kind: number): TypeData | null {
       const attributes = parseFieldAttributes(attrRaw);
       const methodType: TypeIndex = buf.readU32();
       let vtableOffset: number | null = null;
-      if (
-        attributes.mprop === MethodKind.IntroducingVirtual ||
-        attributes.mprop === MethodKind.PureIntroducingVirtual
-      ) {
+      if (isIntroVirtualMethod(attributes)) {
         vtableOffset = buf.readU32();
       }
       const name = readTypeName(buf, kind);
