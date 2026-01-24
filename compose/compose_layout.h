@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <numeric>
@@ -87,10 +86,15 @@ struct Constraints {
 };
 
 // ============================================================================
-// LayoutNode - the core tree node
+// Forward declarations
 // ============================================================================
 
 class LayoutNode;
+
+struct MeasureResult {
+    int width = 0;
+    int height = 0;
+};
 
 // Placeable: a non-owning handle to a measured LayoutNode.
 class Placeable {
@@ -105,19 +109,22 @@ public:
     LayoutNode* node() const { return node_; }
 };
 
-struct MeasureResult {
-    int width = 0;
-    int height = 0;
+// ============================================================================
+// MeasurePolicy - abstract base class for layout algorithms
+// ============================================================================
+
+class MeasurePolicy {
+public:
+    virtual ~MeasurePolicy() = default;
+    virtual MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) = 0;
 };
 
-// A MeasurePolicy receives children (as raw pointers) and constraints,
-// measures children, places them, and returns the layout's own size.
-using MeasurePolicy = std::function<MeasureResult(
-    std::span<LayoutNode*> children,
-    Constraints constraints)>;
+// ============================================================================
+// LayoutNode - the core tree node
+// ============================================================================
 
 class LayoutNode {
-    MeasurePolicy policy_;
+    MeasurePolicy* policy_;
     std::vector<LayoutNode*> children_;
 
     // Measurement state
@@ -128,15 +135,17 @@ class LayoutNode {
     bool measured_ = false;
 
 public:
-    explicit LayoutNode(MeasurePolicy policy, std::initializer_list<LayoutNode*> children = {})
-        : policy_(std::move(policy)), children_(children) {}
+    explicit LayoutNode(MeasurePolicy* policy, std::initializer_list<LayoutNode*> children = {})
+        : policy_(policy), children_(children) {}
 
-    LayoutNode(MeasurePolicy policy, std::vector<LayoutNode*> children)
-        : policy_(std::move(policy)), children_(std::move(children)) {}
+    LayoutNode(MeasurePolicy* policy, std::vector<LayoutNode*> children)
+        : policy_(policy), children_(std::move(children)) {}
+
+    ~LayoutNode() { delete policy_; }
 
     Placeable measure(Constraints constraints) {
         if (policy_) {
-            auto result = policy_(std::span(children_), constraints);
+            auto result = policy_->Measure(std::span(children_), constraints);
             measuredWidth_ = constraints.constrainWidth(result.width);
             measuredHeight_ = constraints.constrainHeight(result.height);
         }
@@ -177,7 +186,7 @@ inline int Placeable::width() const { return node_->measuredWidth(); }
 inline int Placeable::height() const { return node_->measuredHeight(); }
 inline void Placeable::placeAt(int x, int y) { node_->place(x, y); }
 
-// Recursively delete a tree of LayoutNodes.
+// Recursively delete a tree of LayoutNodes (destructor handles policy deletion).
 inline void freeTree(LayoutNode* node) {
     if (!node) return;
     for (auto* child : node->children()) {
@@ -291,7 +300,7 @@ inline int align(Alignment alignment, int childSize, int parentSize) {
 }
 
 // ============================================================================
-// Built-in MeasurePolicy factories: Row, Column, Box
+// Built-in MeasurePolicy classes: RowPolicy, ColumnPolicy, BoxPolicy, LeafPolicy
 // ============================================================================
 
 struct RowConfig {
@@ -300,9 +309,13 @@ struct RowConfig {
     Alignment crossAxisAlignment = Alignment::Start;
 };
 
-inline MeasurePolicy rowPolicy(RowConfig config = {}) {
-    return [config](std::span<LayoutNode*> children,
-                    Constraints constraints) -> MeasureResult {
+class RowPolicy : public MeasurePolicy {
+    RowConfig config_;
+
+public:
+    explicit RowPolicy(RowConfig config = {}) : config_(config) {}
+
+    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
         int n = static_cast<int>(children.size());
         if (n == 0) {
             return {constraints.minWidth, constraints.minHeight};
@@ -313,7 +326,7 @@ inline MeasurePolicy rowPolicy(RowConfig config = {}) {
         std::vector<int> widths;
         widths.reserve(n);
 
-        int totalSpacing = config.spacing * (n - 1);
+        int totalSpacing = config_.spacing * (n - 1);
         int remainingWidth = constraints.hasBoundedWidth()
                                  ? constraints.maxWidth - totalSpacing
                                  : Infinity;
@@ -337,15 +350,15 @@ inline MeasurePolicy rowPolicy(RowConfig config = {}) {
         int layoutWidth = constraints.constrainWidth(totalWidth);
         int layoutHeight = constraints.constrainHeight(maxHeight);
 
-        auto positions = arrange(config.arrangement, layoutWidth, widths, config.spacing);
+        auto positions = arrange(config_.arrangement, layoutWidth, widths, config_.spacing);
         for (int i = 0; i < n; i++) {
-            int crossOffset = align(config.crossAxisAlignment, placeables[i].height(), layoutHeight);
+            int crossOffset = align(config_.crossAxisAlignment, placeables[i].height(), layoutHeight);
             placeables[i].placeAt(positions[i], crossOffset);
         }
 
         return {layoutWidth, layoutHeight};
-    };
-}
+    }
+};
 
 struct ColumnConfig {
     int spacing = 0;
@@ -353,9 +366,13 @@ struct ColumnConfig {
     Alignment crossAxisAlignment = Alignment::Start;
 };
 
-inline MeasurePolicy columnPolicy(ColumnConfig config = {}) {
-    return [config](std::span<LayoutNode*> children,
-                    Constraints constraints) -> MeasureResult {
+class ColumnPolicy : public MeasurePolicy {
+    ColumnConfig config_;
+
+public:
+    explicit ColumnPolicy(ColumnConfig config = {}) : config_(config) {}
+
+    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
         int n = static_cast<int>(children.size());
         if (n == 0) {
             return {constraints.minWidth, constraints.minHeight};
@@ -366,7 +383,7 @@ inline MeasurePolicy columnPolicy(ColumnConfig config = {}) {
         std::vector<int> heights;
         heights.reserve(n);
 
-        int totalSpacing = config.spacing * (n - 1);
+        int totalSpacing = config_.spacing * (n - 1);
         int remainingHeight = constraints.hasBoundedHeight()
                                   ? constraints.maxHeight - totalSpacing
                                   : Infinity;
@@ -390,24 +407,28 @@ inline MeasurePolicy columnPolicy(ColumnConfig config = {}) {
         int layoutWidth = constraints.constrainWidth(maxWidth);
         int layoutHeight = constraints.constrainHeight(totalHeight);
 
-        auto positions = arrange(config.arrangement, layoutHeight, heights, config.spacing);
+        auto positions = arrange(config_.arrangement, layoutHeight, heights, config_.spacing);
         for (int i = 0; i < n; i++) {
-            int crossOffset = align(config.crossAxisAlignment, placeables[i].width(), layoutWidth);
+            int crossOffset = align(config_.crossAxisAlignment, placeables[i].width(), layoutWidth);
             placeables[i].placeAt(crossOffset, positions[i]);
         }
 
         return {layoutWidth, layoutHeight};
-    };
-}
+    }
+};
 
 struct BoxConfig {
     Alignment horizontalAlignment = Alignment::Start;
     Alignment verticalAlignment = Alignment::Start;
 };
 
-inline MeasurePolicy boxPolicy(BoxConfig config = {}) {
-    return [config](std::span<LayoutNode*> children,
-                    Constraints constraints) -> MeasureResult {
+class BoxPolicy : public MeasurePolicy {
+    BoxConfig config_;
+
+public:
+    explicit BoxPolicy(BoxConfig config = {}) : config_(config) {}
+
+    MeasureResult Measure(std::span<LayoutNode*> children, Constraints constraints) override {
         if (children.empty()) {
             return {constraints.minWidth, constraints.minHeight};
         }
@@ -429,14 +450,14 @@ inline MeasurePolicy boxPolicy(BoxConfig config = {}) {
         int layoutHeight = constraints.constrainHeight(maxHeight);
 
         for (auto& p : placeables) {
-            int x = align(config.horizontalAlignment, p.width(), layoutWidth);
-            int y = align(config.verticalAlignment, p.height(), layoutHeight);
+            int x = align(config_.horizontalAlignment, p.width(), layoutWidth);
+            int y = align(config_.verticalAlignment, p.height(), layoutHeight);
             p.placeAt(x, y);
         }
 
         return {layoutWidth, layoutHeight};
-    };
-}
+    }
+};
 
 // ============================================================================
 // Leaf node - a fixed-size terminal node
@@ -447,32 +468,36 @@ struct LeafConfig {
     int height = 0;
 };
 
-inline MeasurePolicy leafPolicy(LeafConfig config) {
-    return [config](std::span<LayoutNode*> /*children*/,
-                    Constraints constraints) -> MeasureResult {
-        return {constraints.constrainWidth(config.width),
-                constraints.constrainHeight(config.height)};
-    };
-}
+class LeafPolicy : public MeasurePolicy {
+    LeafConfig config_;
+
+public:
+    explicit LeafPolicy(LeafConfig config) : config_(config) {}
+
+    MeasureResult Measure(std::span<LayoutNode*> /*children*/, Constraints constraints) override {
+        return {constraints.constrainWidth(config_.width),
+                constraints.constrainHeight(config_.height)};
+    }
+};
 
 // ============================================================================
 // Builder functions - convenient node construction
 // ============================================================================
 
 inline LayoutNode* Leaf(LeafConfig config) {
-    return new LayoutNode(leafPolicy(config));
+    return new LayoutNode(new LeafPolicy(config));
 }
 
 inline LayoutNode* Row(RowConfig config, std::initializer_list<LayoutNode*> children) {
-    return new LayoutNode(rowPolicy(config), children);
+    return new LayoutNode(new RowPolicy(config), children);
 }
 
 inline LayoutNode* Column(ColumnConfig config, std::initializer_list<LayoutNode*> children) {
-    return new LayoutNode(columnPolicy(config), children);
+    return new LayoutNode(new ColumnPolicy(config), children);
 }
 
 inline LayoutNode* Box(BoxConfig config, std::initializer_list<LayoutNode*> children) {
-    return new LayoutNode(boxPolicy(config), children);
+    return new LayoutNode(new BoxPolicy(config), children);
 }
 
 inline LayoutNode* Row(std::initializer_list<LayoutNode*> children) {
@@ -487,8 +512,8 @@ inline LayoutNode* Box(std::initializer_list<LayoutNode*> children) {
     return Box({}, children);
 }
 
-inline LayoutNode* Layout(MeasurePolicy policy, std::initializer_list<LayoutNode*> children = {}) {
-    return new LayoutNode(std::move(policy), children);
+inline LayoutNode* Layout(MeasurePolicy* policy, std::initializer_list<LayoutNode*> children = {}) {
+    return new LayoutNode(policy, children);
 }
 
 } // namespace compose
