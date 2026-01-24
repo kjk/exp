@@ -1,3 +1,70 @@
 look at https://github.com/getsentry/pdb/pull/147 which a PR to the original rust library
 port it to typescript
 ---
+port src/tpi/primitive.rs from original rust repot to idiomatic typescript
+convert PrimitiveKind enum to a list of numberic constants that map to index type e.g.:
+const PrimitiveKind_RChar16 = 0x7a;
+move primitiveTypeName() function from pdb2hpp.ts to src/tpi/primitive.ts
+---
+port src/tpi/data.rs from original rust repot to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/134 from original rust library to idiomatic typescript
+---
+look at src/tpi/constants.rs in original rust repo
+compare to src/tpi/constants.ts in this repo
+make sure all constants are ported over including code that references them
+---
+port PR https://github.com/getsentry/pdb/pull/135 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/136 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/141 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/143 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/154 from original rust library to idiomatic typescript
+---
+port all files in src/sybmbol directory from original rust repo to idiomatic typescript
+update the rest of the port that referenced symbol module to use the new typescript symbol module
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1141 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x115a is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1168 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x113a is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1153 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x115e is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+
+
+
+
+
+
+
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x117f is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
