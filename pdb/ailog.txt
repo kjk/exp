@@ -1,0 +1,180 @@
+look at https://github.com/getsentry/pdb/pull/147 which a PR to the original rust library
+port it to typescript
+---
+port src/tpi/primitive.rs from original rust repot to idiomatic typescript
+convert PrimitiveKind enum to a list of numberic constants that map to index type e.g.:
+const PrimitiveKind_RChar16 = 0x7a;
+move primitiveTypeName() function from pdb2hpp.ts to src/tpi/primitive.ts
+---
+port src/tpi/data.rs from original rust repot to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/134 from original rust library to idiomatic typescript
+---
+look at src/tpi/constants.rs in original rust repo
+compare to src/tpi/constants.ts in this repo
+make sure all constants are ported over including code that references them
+---
+port PR https://github.com/getsentry/pdb/pull/135 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/136 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/141 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/143 from original rust library to idiomatic typescript
+---
+port PR https://github.com/getsentry/pdb/pull/154 from original rust library to idiomatic typescript
+---
+port all files in src/sybmbol directory from original rust repo to idiomatic typescript
+update the rest of the port that referenced symbol module to use the new typescript symbol module
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1141 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x115a is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1168 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x113a is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x1153 is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x115e is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?
+---
+improve pdb2hpp.ts to also print, as a commont, the source file or object file in which this symbol is defined
+---
+port https://github.com/getsentry/pdb/pull/146 from original rust library to idiomatic typescript
+---
+improve examples/pdb_symbols.ts to not print module/segment if they don't have any symbols
+---
+analyze https://raw.githubusercontent.com/microsoft/microsoft-pdb/master/include/cvinfo.h for all enums
+analyze the code in src/ directory
+the names in cvinfo.h are likely different so cross-reference them
+add missing enums to relevant files in src/ e.g. src/symbol/constants.ts, src/tpi/constants.ts, etc.
+check if existing constants have the same
+---
+https://raw.githubusercontent.com/microsoft/microsoft-pdb/master/include/cvconst.h for all enums
+analyze the code in src/ directory
+the names in cvinfo.h are likely different so cross-reference them
+add missing enums to relevant files in src/ e.g. src/symbol/constants.ts, src/tpi/constants.ts, etc.
+check if existing constants have the same
+---
+write examples/size_stats.ts that takes a path of a pdb file as cmd-line arguments and calculates information about symbols that contribute to the size of .exe or .dll
+write a .csv file that for every symbol writes a csv row:
+module name, segment name, symbol kind, symbol name, rva, symbol size
+.csv file should be created in current directory based on pdb file name e.g. for shell32.pdb it would be shell32_size_info.csv
+collect information about 100 biggest symbols and print them to console as well, with largest last
+print name, kind and size of the symbol
+---
+https://raw.githubusercontent.com/microsoft/microsoft-pdb/master/include/cvconst.h for all enums
+analyze the code in src/ directory
+the names in cvinfo.h are likely different so cross-reference them
+add missing enums to relevant files in src/ e.g. src/symbol/constants.ts, src/tpi/constants.ts, etc.
+check if existing constants have the same
+---
+improve examples/size_stats.ts to skip symbol kind CoffGroup because it's an aggregate of other symbols and its size is not relevant
+---
+improve examples/size_stats.ts to skip symbol name Label because it's not relevant
+print symbol size in .csv in hex
+---
+examples/size_stats.ts prints $xdatasym twice:
+(global),.rdata,Data,$xdatasym,0x2b618,0xf0
+D:\a\_work\1\s\Intermediate\crt\vcstartup\build\mt\libcmt_mt_kernel32.vcxproj\objr\amd64\amdsecgs.obj,.rdata,Data,$xdatasym,0x2b618,0xf0
+can you fix it so that it only prints:
+D:\a\_work\1\s\Intermediate\crt\vcstartup\build\mt\libcmt_mt_kernel32.vcxproj\objr\amd64\amdsecgs.obj,.rdata,Data,$xdatasym,0x2b618,0xf0
+---
+examples/size_stats.ts prints this duplicate:
+(global),.data,Data,__acrt_initial_locale_data,0x2e1b0,0x158
+(global),.data,Public,__acrt_initial_locale_data,0x2e1b0,0x158
+fix it to only print:
+(global),.data,Data,__acrt_initial_locale_data,0x2e1b0,0x158
+---
+change examples/size_stats.ts to write in .csv file first rva then size, then name, then kind, then module name, then segment name
+---
+examples/size_stats.ts prints this duplicate:
+0x7620,0x2c,?StrEqRest@@YA_NPEBD0H@Z,Public,(global),.text
+0x7620,0x2a,StrEqRest,Procedure,rel\str_util.obj,.text
+fix it so that it only prints:
+0x7620,0x2a,StrEqRest,Procedure,rel\str_util.obj,.text
+---
+in examples/size_stats.ts, when printing 100 biggest symbols, print size  first
+pad smaller sizes with spaces so that sizes align to the right
+---
+in in examples/size_stats.ts at the end, based on rva / size, check if there are overlaps / duplicates between symbols and print any overlaps / duplicates found at the end
+---
+write examples/func_sizes_with_llvm_pdbutil.ts
+it takes an argument of a pdb file path
+it executes:
+llvm-pdbutil pretty -module-syms -sym-types=funcs <pdb file path>
+it parses out the sizes and name of functions from the output that looks like:
+func [0x0000777c+30 - 0x000078cf-31 | sizeof=339] (FPO) Str __cdecl FormatFileSize(IAllocator* a, unsigned __int64 size)
+Here, sizeof=339 means the function size is 339 bytes
+name is everything after (FPO)
+it then prints them sorted, largest at the end
+---
+to examples/size_stats.ts, add an cmd line flag -just-rva
+when given it only saves data to .csv file and only saves rva, symbol name
+---
+to examples/func_sizes_with_llvm_pdbutil.ts, add an cmd line flag -rva which will create a .csv file with rva and function name
+---
+improve examples/func_sizes_with_llvm_pdbutil.ts
+write a function extractFuncSizeNameRva(line: string): { size: number; name: string; rva: number } | null
+when given a line:
+    func [0x00663050+10 - 0x00663083-11 | sizeof= 51] (FPO) int __cdecl _callnewh(const unsigned __int64 size)
+it retuns:
+{
+  size: 51,
+  name: 'int __cdecl _callnewh(const unsigned __int64 size)',
+  rva: 0x663050
+}
+use that function in run()
+---
+improve examples/size_stats.ts
+when de-duplicating symbols like this:
+0x7620,0x2c,?StrEqRest@@YA_NPEBD0H@Z,Public,(global),.text
+0x7620,0x2a,StrEqRest,Procedure,rel\str_util.obj,.text
+currently we pick name StrEqRest
+pick ?StrEqRest@@YA_NPEBD0H@Z from Public symbol instead because it is more complete
+---
+write example/prepare_demangle_data.ts which will:
+read SumatraPDF_rva.csv file which is CSV with entries:
+rva,demangled name
+read SumatraPDF_size_info.csv, which is CSV file with entries:
+rva,name
+for every rva that has entry in both files and the names are different, write to mange_test_data.csv file:
+rva,name,demangled name
+---
+
+in src/demangle_cpp.ts implement a function demangleCpp(s: string): string
+I can't tell you how it works exactly but I have extensive test data
+read mange_test_data.csv which is CSV file with entries:
+rva,name,demangled name
+for every entry, update demangleCpp() to produce demangled name when given name
+iterate over all entries in mange_test_data.csv until demangleCpp() produces correct output
+
+---
+simplify src/error.ts
+convert PdbErrorCode to string constants instead of enum
+convert static methods of PdbError to stand-alone function
+---
+FAILED THIS because 0x117f doesn't seem to be implemented anywhere
+when I run bun .\examples\pdb_symbols.ts ..\..\..\OneDrive\bin\sg.pdb * one of the errors is:
+error parsing symbol: PdbError: Support for symbols of kind 0x117f is not implemented
+can you implement support for that symbol kind?
+is it available in original rust repo and not ported or is it missing in original rust repo as well?

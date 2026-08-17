@@ -1,0 +1,13 @@
+# Build artifacts
+obj/
+lib/
+bin/
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
